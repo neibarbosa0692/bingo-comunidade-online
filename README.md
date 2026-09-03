@@ -30,3 +30,4 @@ Faça uma cópia de segurança do `bingo.db` antes da migração.
 ## Parte online
 
 Leia `DEPLOY_ONLINE.md`. Para que vendedores acessem de qualquer lugar, a parte online precisa ser hospedada em um servidor com endereço público e armazenamento persistente.
+Atualização para deploy Docker.
