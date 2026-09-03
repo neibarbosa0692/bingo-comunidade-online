@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+.env
+.secret_key
+bingo.db
+bingo_cloud.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backups/
