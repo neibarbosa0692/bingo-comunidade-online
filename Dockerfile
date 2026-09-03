@@ -5,7 +5,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements_cloud.txt ./
+COPY requirements.txt requirements_cloud.txt ./
 RUN pip install --no-cache-dir -r requirements_cloud.txt gunicorn
 
 COPY . .
