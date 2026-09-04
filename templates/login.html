@@ -1,0 +1,16 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar • Bingo Comunidade</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body class="login-page-v5">
+<div class="login-shell-v5">
+  <section class="login-brand-v5"><div class="login-logo-v5">B</div><span class="eyebrow light">BINGO COMUNIDADE V11</span><h1>Controle seguro do seu bingo.</h1><p>Operação híbrida: sorteio local offline, vendas remotas online, estoque físico, auditoria e fechamento de caixa.</p><div class="login-features-v5"><span>✓ Funciona offline</span><span>✓ Senhas protegidas</span><span>✓ Registro de operações</span></div></section>
+  <section class="login-card-v5">
+    <div><span class="eyebrow">ACESSO AO SISTEMA</span><h2>Bem-vindo</h2><p>Entre com seu usuário e senha.</p></div>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+    <form method="post" class="form-stack">
+      <label>Usuário<input name="usuario" required autofocus autocomplete="username" placeholder="Seu usuário"></label>
+      <label>Senha<input type="password" name="senha" required autocomplete="current-password" placeholder="••••••••"></label>
+      <button class="btn btn-primary btn-xl">Entrar no sistema</button>
+    </form>
+    {% if first_access %}<div class="first-access-v5"><b>Primeiro acesso após atualizar para V5</b><span>Usuário: <strong>admin</strong> • Senha temporária: <strong>admin123</strong></span><small>O sistema obrigará a criar uma nova senha.</small></div>{% endif %}
+  </section>
+</div>
+</body></html>

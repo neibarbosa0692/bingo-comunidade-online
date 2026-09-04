@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block page_title %}Rodadas e Prêmios{% endblock %}
+{% block content %}
+<section class="grid-2">
+  <div class="panel">
+    <span class="eyebrow">NOVA RODADA</span><h3>Configurar premiação</h3>
+    <form method="post" class="form-stack">
+      <label>Nome da rodada<input name="nome" required placeholder="Ex.: Prêmio principal"></label>
+      <label>Padrão vencedor
+        <select name="padrao">
+          <option value="linha">1 linha horizontal</option>
+          <option value="duas_linhas">2 linhas horizontais</option>
+          <option value="quatro_cantos">4 cantos</option>
+          <option value="x">X completo</option>
+          <option value="cartela_cheia">Cartela cheia</option>
+        </select>
+      </label>
+      <label>Valor do prêmio (R$)<input name="premio" value="0,00"></label>
+      <button class="btn btn-primary">Adicionar rodada</button>
+    </form>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">COMO FUNCIONA</span><h3>Uma rodada por vez</h3>
+    <p class="muted">A rodada marcada como <b>ativa</b> define o padrão que o sistema procura automaticamente durante o sorteio.</p>
+    <div class="info-box"><b>Continuar números</b><span>Ative a próxima rodada sem apagar os números já sorteados.</span></div>
+    <div class="info-box"><b>Novo sorteio</b><span>Use “Ativar + zerar números” quando a próxima rodada começar do zero.</span></div>
+    <div class="info-box v7-final-info"><b>Rodada finalizada</b><span>Fica identificada em vermelho e não pode mais ser reativada por engano.</span></div>
+  </div>
+</section>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">PROGRAMAÇÃO</span><h3>Rodadas cadastradas</h3></div><span class="badge">{{ rodadas|length }} rodadas</span></div>
+  <div class="round-list">
+    {% for r in rodadas %}
+    <div class="round-card {{ r.status }}">
+      <div class="round-order">{{ r.ordem }}</div>
+      <div class="round-main">
+        <div class="round-title"><strong class="{% if r.status=='finalizada' %}v7-finalized-name{% endif %}">{{ r.nome }}</strong><span class="round-status {{ r.status }}">{{ r.status }}</span></div>
+        <div class="round-meta"><span>{{ padrao_label(r.padrao) }}</span><span>Prêmio: <b>R$ {{ '%.2f'|format(r.premio) }}</b></span><span>{{ r.vencedores }} vencedor(es)</span></div>
+      </div>
+      <div class="round-actions">
+        {% if r.status == 'pendente' %}
+        <form action="{{ url_for('rodada_acao', rodada_id=r.id) }}" method="post"><input type="hidden" name="acao" value="ativar"><button class="btn btn-small btn-primary">Ativar</button></form>
+        <form action="{{ url_for('rodada_acao', rodada_id=r.id) }}" method="post" onsubmit="return confirm('Ativar esta rodada e apagar os números sorteados?')"><input type="hidden" name="acao" value="ativar_reset"><button class="btn btn-small">Ativar + zerar números</button></form>
+        {% elif r.status == 'ativa' %}
+        <form action="{{ url_for('rodada_acao', rodada_id=r.id) }}" method="post"><input type="hidden" name="acao" value="finalizar"><button class="btn btn-small">Finalizar</button></form>
+        {% else %}
+        <span class="v7-finalized-lock">✓ Finalizada</span>
+        {% endif %}
+        {% if r.status != 'ativa' %}<form action="{{ url_for('rodada_acao', rodada_id=r.id) }}" method="post" onsubmit="return confirm('Excluir esta rodada?')"><input type="hidden" name="acao" value="excluir"><button class="btn btn-small btn-danger">Excluir</button></form>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

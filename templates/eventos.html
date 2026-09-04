@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Meus bingos • Bingo Comunidade{% endblock %}
+{% block page_title %}Meus Bingos{% endblock %}
+{% block content %}
+<section class="grid-2 v4-top-grid">
+  <div class="panel">
+    <span class="eyebrow">NOVO EVENTO</span>
+    <h3>Criar outro bingo</h3>
+    <form method="post" class="form-stack">
+      <label>Nome do evento<input name="nome" required value="Ação Entre Amigos" placeholder="Ex.: Ação Entre Amigos"></label>
+      <label>Data<input type="date" name="data" value="2026-11-07"></label>
+      <label>Valor da cartela (R$)<input name="valor_cartela" value="15,00"></label>
+      <label>Horário / observação<input name="horario_cartela" value="Após a Santa Missa das 18h"></label>
+      <input type="hidden" name="organizador_cartela" value="Comunidade Jesus Misericordioso">
+      <label>Prêmios da cartela<textarea name="premios_cartela" rows="6">R$ 300,00
+R$ 100,00 + Liquidificador
+R$ 100,00 + Liquidificador
+Sanduicheira + Batedeira
+Cesta Básica + Liquidificador Turbo</textarea></label>
+      <button class="btn btn-primary">Criar e selecionar evento</button>
+    </form>
+    <p class="muted">Cada evento possui suas próprias cartelas, vendas, rodadas, sorteios, ganhadores e relatório.</p>
+  </div>
+  <div class="panel event-info-card">
+    <span class="eyebrow">GESTÃO DE EVENTOS</span>
+    <h3>Agora você pode editar ou excluir</h3>
+    <p class="muted">Use <b>Editar</b> para corrigir nome, data, valor da cartela ou endereço da rede. O botão <b>Excluir</b> remove definitivamente o evento e seus dados operacionais.</p>
+    <div class="v4-mini-flow"><span>Preparação</span><b>→</b><span>Em andamento</span><b>→</b><span>Encerrado</span></div>
+  </div>
+</section>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">HISTÓRICO</span><h3>Eventos cadastrados</h3></div><span class="badge">{{ eventos|length }} evento(s)</span></div>
+  <div class="event-list-v4">
+    {% for e in eventos %}
+    <div class="event-row-v4 {% if e.ativo %}selected{% endif %}">
+      <div class="event-state-icon {{ e.status }}">{% if e.status=='encerrado' %}✓{% elif e.status=='em_andamento' %}●{% else %}◌{% endif %}</div>
+      <div class="event-main-v4">
+        <div class="event-title-v4"><strong>{{ e.nome }}</strong>{% if e.ativo %}<span class="round-status ativa">SELECIONADO</span>{% endif %}</div>
+        <div class="round-meta"><span>{{ e.data or 'Data não informada' }}</span><span>{{ status_evento_label(e.status) }}</span><span>R$ {{ '%.2f'|format(e.valor_cartela) }}</span></div>
+        <div class="event-kpis-v4"><span><b>{{ e.cartelas }}</b> cartelas</span><span><b>{{ e.vendidas }}</b> vendidas</span><span><b>{{ e.ganhadores }}</b> ganhadores</span></div>
+      </div>
+      <div class="event-actions-v4 v7-event-actions">
+        {% if not e.ativo %}<form action="{{ url_for('evento_ativar', evento_id=e.id) }}" method="post"><button class="btn">Selecionar</button></form>{% else %}<a class="btn btn-primary" href="{{ url_for('dashboard') }}">Abrir painel</a>{% endif %}
+        <a class="btn" href="{{ url_for('evento_editar', evento_id=e.id) }}">Editar</a>
+        <form action="{{ url_for('evento_excluir', evento_id=e.id) }}" method="post" onsubmit="return confirm('Excluir DEFINITIVAMENTE este evento e todos os dados dele? Esta ação não pode ser desfeita.')"><button class="btn btn-danger">Excluir</button></form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

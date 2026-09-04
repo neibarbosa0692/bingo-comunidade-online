@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Operação • Bingo Comunidade{% endblock %}
+{% block page_title %}Preparação e Encerramento{% endblock %}
+{% block content %}
+<section class="operation-hero {{ evento.status }}">
+  <div>
+    <span class="eyebrow light">SITUAÇÃO DO EVENTO</span>
+    <h2>{{ status_evento_label(evento.status) }}</h2>
+    <p>{{ evento.nome }}{% if evento.data %} • {{ evento.data }}{% endif %}</p>
+  </div>
+  <div class="operation-actions">
+    {% if evento.status=='preparacao' %}
+      <form action="{{ url_for('evento_status', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="iniciar"><button class="btn btn-light btn-xl">Iniciar evento</button></form>
+    {% elif evento.status=='em_andamento' %}
+      <form action="{{ url_for('evento_status', evento_id=evento.id) }}" method="post" onsubmit="return confirm('Encerrar oficialmente este evento? Depois disso vendas, sorteio e alterações operacionais ficarão bloqueadas.')"><input type="hidden" name="acao" value="encerrar"><button class="btn btn-light btn-xl">Encerrar evento</button></form>
+    {% else %}
+      <form action="{{ url_for('evento_status', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="reabrir"><button class="btn btn-light">Reabrir evento</button></form>
+      <a class="btn btn-light" href="{{ url_for('relatorios') }}">Ver relatório final</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="stats-grid">
+  <div class="stat-card"><span>Cartelas</span><strong>{{ total }}</strong><small>{{ vendidas }} vendidas</small></div>
+  <div class="stat-card"><span>Distribuídas</span><strong>{{ distribuidas }}</strong><small>Com vendedores</small></div>
+  <div class="stat-card"><span>Sorteados</span><strong>{{ sorteados }}</strong><small>Números registrados</small></div>
+  <div class="stat-card"><span>Preparação</span><strong>{{ prontos }}/{{ pendencias|length }}</strong><small>Itens verificados</small></div>
+</section>
+
+<section class="grid-2">
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">CHECKLIST</span><h3>Antes de começar</h3></div><span class="badge">{{ prontos }}/{{ pendencias|length }}</span></div>
+    <div class="check-list-v4">
+      {% for p in pendencias %}
+      <div class="check-item-v4 {% if p.ok %}ok{% endif %}"><div class="check-dot-v4">{{ '✓' if p.ok else '!' }}</div><div><strong>{{ p.titulo }}</strong><span>{{ p.texto }}</span></div></div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">FLUXO RECOMENDADO</span><h3>Operação do dia</h3>
+    <div class="timeline-v4">
+      <a href="{{ url_for('distribuicao') }}"><b>01</b><div><strong>Fechar distribuição</strong><span>Conferir cartelas entregues e devoluções.</span></div></a>
+      <a href="{{ url_for('financeiro') }}"><b>02</b><div><strong>Conferir caixa</strong><span>Registrar acertos dos vendedores.</span></div></a>
+      <a href="{{ url_for('rodadas') }}"><b>03</b><div><strong>Revisar premiações</strong><span>Confirmar rodadas e valores dos prêmios.</span></div></a>
+      <a href="{{ url_for('sorteio') }}"><b>04</b><div><strong>Executar o bingo</strong><span>Sorteio, conferência e ganhadores.</span></div></a>
+      <a href="{{ url_for('relatorios') }}"><b>05</b><div><strong>Fechar e prestar contas</strong><span>Relatório final e backup do evento.</span></div></a>
+    </div>
+  </div>
+</section>
+{% endblock %}

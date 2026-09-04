@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Bingo Comunidade{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">B</div><div><strong>Bingo</strong><span>Comunidade</span></div></div>
+    <nav>
+      {% if pode('dashboard') %}<a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}">⌂ <span>Visão geral</span></a>{% endif %}
+      {% if pode('eventos') %}<a href="{{ url_for('eventos') }}" class="{% if request.endpoint in ['eventos','evento_ativar','evento_editar','evento_excluir'] %}active{% endif %}">◉ <span>Meus bingos</span></a>{% endif %}
+      {% if pode('eventos') %}<a href="{{ url_for('evento') }}" class="{% if request.endpoint=='evento' %}active{% endif %}">◈ <span>Configurações</span></a>{% endif %}
+      {% if pode('operacao') %}<a href="{{ url_for('operacao') }}" class="{% if request.endpoint in ['operacao','evento_status'] %}active{% endif %}">✓ <span>Operação</span></a>{% endif %}
+      {% if pode('cartelas') %}<a href="{{ url_for('cartelas') }}" class="{% if request.endpoint in ['cartelas','cartelas_pdf'] %}active{% endif %}">▦ <span>Cartelas</span></a>{% endif %}
+      {% if pode('estoque') %}<a href="{{ url_for('estoque') }}" class="{% if request.endpoint in ['estoque','lote_pdf'] %}active{% endif %}">▥ <span>Estoque</span></a>{% endif %}
+      {% if pode('vendedores') %}<a href="{{ url_for('vendedores') }}" class="{% if request.endpoint=='vendedores' %}active{% endif %}">♙ <span>Vendedores</span></a>{% endif %}
+      {% if pode('distribuicao') %}<a href="{{ url_for('distribuicao') }}" class="{% if request.endpoint=='distribuicao' %}active{% endif %}">⇄ <span>Distribuição</span></a>{% endif %}
+      {% if pode('vendas') %}<a href="{{ url_for('vendas') }}" class="{% if request.endpoint in ['vendas','venda_cancelar','comprovante_venda'] %}active{% endif %}">₿ <span>Vendas</span></a>{% endif %}
+      {% if pode('busca') %}<a href="{{ url_for('busca') }}" class="{% if request.endpoint=='busca' %}active{% endif %}">⌕ <span>Busca</span></a>{% endif %}
+      {% if pode('financeiro') %}<a href="{{ url_for('financeiro') }}" class="{% if request.endpoint=='financeiro' %}active{% endif %}">▤ <span>Financeiro</span></a>{% endif %}
+      {% if pode('caixa') %}<a href="{{ url_for('caixa') }}" class="{% if request.endpoint=='caixa' %}active{% endif %}">▰ <span>Caixa</span></a>{% endif %}
+      {% if pode('rodadas') %}<a href="{{ url_for('rodadas') }}" class="{% if request.endpoint in ['rodadas','rodada_acao'] %}active{% endif %}">◇ <span>Rodadas</span></a>{% endif %}
+      {% if pode('celulares') %}<a href="{{ url_for('acesso_movel') }}" class="{% if request.endpoint=='acesso_movel' %}active{% endif %}">▥ <span>Celulares</span></a>{% endif %}
+      {% if pode('sincronizacao') %}<a href="{{ url_for('sincronizacao') }}" class="{% if request.endpoint in ['sincronizacao','sincronizacao_acao'] %}active{% endif %}">⇅ <span>Online / Offline</span></a>{% endif %}
+      {% if pode('sorteio') %}<a href="{{ url_for('sorteio') }}" target="_blank" rel="noopener" class="{% if request.endpoint=='sorteio' %}active{% endif %}">● <span>Sorteio ↗</span></a>{% endif %}
+      {% if pode('estatisticas') %}<a href="{{ url_for('estatisticas') }}" class="{% if request.endpoint=='estatisticas' %}active{% endif %}">▤ <span>Estatísticas</span></a>{% endif %}
+      {% if pode('relatorios') %}<a href="{{ url_for('relatorios') }}" class="{% if request.endpoint in ['relatorios','relatorio_pdf'] %}active{% endif %}">▧ <span>Relatórios</span></a>{% endif %}
+      {% if pode('auditoria') %}<a href="{{ url_for('auditoria') }}" class="{% if request.endpoint=='auditoria' %}active{% endif %}">◎ <span>Auditoria</span></a>{% endif %}
+      {% if pode('backups') %}<a href="{{ url_for('backups') }}" class="{% if request.endpoint and (request.endpoint.startswith('backup') or request.endpoint=='backups') %}active{% endif %}">↻ <span>Backup</span></a>{% endif %}
+      {% if pode('usuarios') %}<a href="{{ url_for('usuarios') }}" class="{% if request.endpoint in ['usuarios','usuario_acao'] %}active{% endif %}">♟ <span>Usuários</span></a>{% endif %}
+      {% if pode('sorteio') %}<a href="{{ url_for('telao') }}" target="_blank">▣ <span>Abrir telão</span></a>{% endif %}
+    </nav>
+    <div class="sidebar-user-v5">
+      {% if usuario_atual %}
+      <div class="avatar-v5">{{ usuario_atual.nome[:1]|upper }}</div>
+      <div><strong>{{ usuario_atual.nome }}</strong><span>{{ perfil_label(usuario_atual.perfil) }}</span></div>
+      <a href="{{ url_for('logout') }}" title="Sair">↪</a>
+      {% endif %}
+    </div>
+    <div class="sidebar-foot"><span class="status-dot"></span> {% if bingo_mode=='cloud' %}Servidor online{% else %}Servidor local híbrido{% endif %}<small>V11 • online + offline{% if sync_resumo and sync_resumo.enabled %} • {% if sync_resumo.last_sync_ok %}sincronizado{% else %}offline/pendente{% endif %}{% endif %}</small></div>
+  </aside>
+  <main class="content">
+    <header class="topbar">
+      <div><div class="eyebrow">EVENTO ATUAL</div><h1>{% block page_title %}Bingo da Comunidade{% endblock %}</h1></div>
+      <div class="topbar-actions-v5">
+        {% if pode('busca') %}<form class="top-search-v6" action="{{ url_for('busca') }}" method="get"><input name="q" placeholder="Buscar cartela..."><button title="Buscar">⌕</button></form>{% endif %}{% if usuario_atual %}<a class="user-chip-v5" href="{{ url_for('minha_senha') }}"><span>{{ usuario_atual.nome }}</span><small>{{ perfil_label(usuario_atual.perfil) }}</small></a>{% endif %}
+        {% if evento %}<div class="event-chip {% if evento.status=='encerrado' %}closed{% elif evento.status=='em_andamento' %}live{% endif %}"><span class="status-dot"></span>{{ evento.nome }}<small>{% if evento.status=='encerrado' %}Encerrado{% elif evento.status=='em_andamento' %}Em andamento{% else %}Em preparação{% endif %}</small></div>{% endif %}
+      </div>
+    </header>
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

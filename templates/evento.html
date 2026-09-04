@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}Configuração do Evento{% endblock %}
+{% block content %}
+<div class="panel narrow">
+  <div class="panel-head"><div><span class="eyebrow">DADOS DO BINGO</span><h3>Evento atual</h3></div></div>
+  <form method="post" class="form-grid">
+    <label>Nome do evento<input name="nome" value="{{ evento.nome }}" required></label>
+    <label>Data<input type="date" name="data" value="{{ evento.data or '' }}"></label>
+    <label>Valor da cartela (R$)<input name="valor_cartela" value="{{ '%.2f'|format(evento.valor_cartela) }}"></label>
+    <label>Modalidade<input value="75 números" disabled></label>
+
+    <label style="grid-column:1/-1">Organizador exibido na cartela
+      <input name="organizador_cartela" value="{{ evento.organizador_cartela or 'Comunidade Jesus Misericordioso' }}">
+    </label>
+    <label style="grid-column:1/-1">Horário / observação do sorteio
+      <input name="horario_cartela" value="{{ evento.horario_cartela or 'Após a Santa Missa das 18h' }}" placeholder="Ex.: Após a Santa Missa das 18h">
+    </label>
+    <label style="grid-column:1/-1">Prêmios impressos na cartela
+      <textarea name="premios_cartela" rows="6" placeholder="Um prêmio por linha">{{ evento.premios_cartela or '' }}</textarea>
+      <span class="hint">Use uma linha para cada prêmio. O modelo personalizado exibe até 5 prêmios.</span>
+    </label>
+
+    <label style="grid-column:1/-1">Endereço para celulares
+      <input name="url_rede" value="{{ evento.url_rede or '' }}" placeholder="Deixe vazio para detectar automaticamente">
+      <span class="hint">Opcional. Ex.: http://192.168.0.10:8765. Na V11, quando o servidor online estiver configurado, os QR Codes das cartelas priorizam automaticamente a URL online.</span>
+    </label>
+    <div class="form-actions"><button class="btn btn-primary">Salvar alterações</button></div>
+  </form>
+</div>
+{% endblock %}

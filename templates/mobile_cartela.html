@@ -1,0 +1,25 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Cartela {{ '%04d'|format(card.numero) }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body class="mobile-body"><main class="mobile-shell">
+<header class="mobile-top"><div class="mobile-brand">B</div><div><span>{{ evento.nome }}</span><h1>Cartela #{{ '%04d'|format(card.numero) }}</h1></div></header>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+{% if vendas_fechadas %}<div class="mobile-closed-banner">🔒 Vendas encerradas para o sorteio</div>{% endif %}
+<div class="mobile-ticket-status {{ card.status }}"><span>{% if card.status=='vendida' %}VENDIDA{% elif card.status=='inutilizada' %}INUTILIZADA{% else %}DISPONÍVEL{% endif %}</span><strong>#{{ '%04d'|format(card.numero) }}</strong></div>
+<div class="mobile-bingo-grid"><div class="mobile-bingo-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div>{% for row in grade %}<div class="mobile-bingo-row">{% for n in row %}<span class="{% if n==0 %}free logo-free{% endif %}">{% if n==0 %}<img src="{{ url_for('static', filename='logo_comunidade.png') }}" alt="Logo">{% else %}{{ n }}{% endif %}</span>{% endfor %}</div>{% endfor %}</div>
+{% if card.status == 'disponivel' %}
+  {% if vendas_fechadas %}
+  <section class="mobile-card"><span class="eyebrow">VENDAS ENCERRADAS</span><h2>Esta cartela não pode mais ser baixada</h2><p>O evento já entrou em preparação para o sorteio.</p></section>
+  {% elif not vendedor %}
+  <section class="mobile-card"><span class="eyebrow">IDENTIFICAÇÃO NECESSÁRIA</span><h2>Entre como vendedor</h2><p>Para segurança, a venda pela internet exige identificação do vendedor.</p><a class="btn btn-primary btn-full" href="{{ url_for('mobile_home') }}">Identificar vendedor</a></section>
+  {% elif card.vendedor_id != vendedor.id %}
+  <section class="mobile-card"><span class="eyebrow">CARTELA DE OUTRO LOTE</span><h2>Venda bloqueada</h2><p>Esta cartela não está atribuída a {{ vendedor.nome }}. Essa regra evita venda duplicada durante falhas de internet.</p></section>
+  {% else %}
+  <section class="mobile-card"><span class="eyebrow">REGISTRAR VENDA</span><h2>Confirmar esta cartela</h2>
+  <form method="post" class="form-stack"><div class="seller-chip">Vendedor: <b>{{ vendedor.nome }}</b></div>
+  <label>Comprador (opcional)<input name="comprador" placeholder="Nome do comprador"></label><label>WhatsApp (opcional)<input name="telefone" placeholder="(91) 99999-9999"></label><label>Pagamento<select name="pagamento"><option value="">Não informado</option><option>PIX</option><option>Dinheiro</option><option>Outro</option></select></label><button class="btn btn-primary btn-full btn-xl">Confirmar venda</button></form></section>
+  {% endif %}
+{% elif card.status == 'vendida' %}
+<section class="mobile-card sold-info"><span class="eyebrow">DADOS DA VENDA</span><h2>Cartela registrada</h2><div class="mobile-data"><span>Comprador<b>{{ card.comprador or 'Não informado' }}</b></span><span>Vendedor<b>{{ card.vendedor or 'Não informado' }}</b></span><span>Pagamento<b>{{ card.pagamento or 'Não informado' }}</b></span></div></section>
+<a class="btn btn-primary btn-full" href="{{ url_for('mobile_comprovante',evento_id=evento.id,numero=card.numero) }}">Baixar comprovante da venda</a>
+<section class="mobile-card check-card"><span class="eyebrow">CONFERÊNCIA AO VIVO</span>{% if rodada %}<h2>{{ rodada.nome }}</h2><p>Padrão: <b>{{ padrao_label(rodada.padrao) }}</b>{% if rodada.premio %} • Prêmio: <b>R$ {{ '%.2f'|format(rodada.premio) }}</b>{% endif %}</p>{% if atende %}<div class="mobile-winner">✓ CARTELA VENCEDORA</div>{% else %}<div class="mobile-notwinner">Ainda não atende ao padrão da rodada</div>{% endif %}{% else %}<h2>Nenhuma rodada ativa</h2><p>O operador precisa ativar uma rodada no computador.</p>{% endif %}</section>
+{% else %}<section class="mobile-card"><span class="eyebrow">FORA DE CIRCULAÇÃO</span><h2>Cartela inutilizada</h2><p>Esta cartela foi marcada como danificada/perdida e não pode ser vendida nem premiada.</p></section>{% endif %}
+<a class="mobile-back" href="{{ url_for('mobile_home') }}">← Voltar para área móvel</a><footer class="mobile-footer">Bingo Comunidade V11 • {% if mode=='cloud' %}online{% else %}local{% endif %}</footer></main></body></html>

@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block page_title %}Minha Senha{% endblock %}{% block content %}
+<div class="panel narrow security-card-v5"><span class="eyebrow">SEGURANÇA</span><h3>Alterar minha senha</h3><p class="muted">Use pelo menos 6 caracteres. Sua senha é armazenada de forma protegida e não pode ser visualizada pelo administrador.</p>
+<form method="post" class="form-stack"><label>Senha atual<input type="password" name="senha_atual" required></label><label>Nova senha<input type="password" name="nova_senha" minlength="6" required></label><label>Confirmar nova senha<input type="password" name="confirmar_senha" minlength="6" required></label><button class="btn btn-primary">Salvar nova senha</button></form></div>
+{% endblock %}

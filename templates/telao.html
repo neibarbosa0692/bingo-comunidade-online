@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-br">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telão • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body class="screen-body-v7">
+  <div id="fullscreenGate" class="v7-fullscreen-gate">
+    <div class="v7-fullscreen-card"><div class="brand-mark">B</div><span>TELÃO DO BINGO</span><h1>{{ evento.nome }}</h1><p>As informações do bingo serão exibidas somente em tela cheia para evitar cortes.</p><button id="fullscreenBtn" class="v7-fullscreen-btn">⛶ Abrir telão em tela cheia</button><small id="fullscreenHint">Clique uma vez para iniciar.</small></div>
+  </div>
+
+  <main id="telaoMain" class="screen-v7">
+    <header class="v7-screen-head">
+      <div><span>BINGO AO VIVO</span><h1 id="evento">{{ evento.nome }}</h1></div>
+      <div class="v7-head-right"><div class="v7-called"><span>NÚMEROS CHAMADOS</span><strong><b id="total">0</b>/75</strong></div><div class="live-chip"><i></i> AO VIVO</div></div>
+    </header>
+
+    <div class="v7-screen-round" id="roundbox"><div><span>RODADA ATUAL</span><strong id="roundname">{{ rodada.nome if rodada else 'Aguardando rodada' }}</strong></div><b id="roundpattern">{{ padrao_label(rodada.padrao) if rodada else '' }}</b><em id="roundprize">{% if rodada and rodada.premio %}Prêmio R$ {{ '%.2f'|format(rodada.premio) }}{% endif %}</em></div>
+
+    <section class="v7-screen-main">
+      <div class="v7-screen-focus"><div class="v7-screen-label">ÚLTIMO NÚMERO</div><div class="v7-screen-ball"><span id="letra">—</span><strong id="ultimo">—</strong></div><div class="v7-last-title">ÚLTIMOS CHAMADOS</div><div class="v7-screen-last" id="ultimos"></div></div>
+      <div class="v7-screen-board"><div class="v7-board-title"><span>PAINEL DE NÚMEROS</span><strong id="calledSummary">0 chamados</strong></div><div id="board" class="v7-screen-numbers"></div></div>
+    </section>
+
+    <section class="v7-screen-near">
+      <div class="v7-near-title"><span>DETECÇÃO AUTOMÁTICA</span><strong>Cartelas próximas do bingo</strong></div>
+      <div class="v7-screen-near-grid" id="nearGrid"></div>
+    </section>
+  </main>
+
+  <div id="winnerOverlay" class="v7-winner-overlay" hidden>
+    <div id="bingoStage" class="v7-bingo-stage"><span>BINGO!</span></div>
+    <div id="winnerStage" class="v7-winner-stage" hidden>
+      <div class="v7-winner-card-grid">
+        <div class="v7-winning-ticket"><div class="v7-ticket-top"><span>CARTELA VENCEDORA</span><strong id="winNumber">#0000</strong></div><div class="v7-ticket-cols"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="winGrid" class="v7-ticket-grid"></div></div>
+        <div class="v7-winner-info"><span class="v7-win-kicker">🏆 GANHADOR CONFIRMADO</span><h2 id="winBuyer">Comprador</h2><div class="v7-winner-data"><div><span>Número</span><strong id="winNumberText">—</strong></div><div><span>Lote</span><strong id="winLot">—</strong></div><div><span>Telefone</span><strong id="winPhone">—</strong></div><div><span>Vendedor</span><strong id="winSeller">—</strong></div><div><span>Rodada</span><strong id="winRound">—</strong></div><div><span>Números chamados</span><strong id="winCalled">0</strong></div></div><div id="winPrize" class="v7-win-prize"></div></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const board=document.getElementById('board');
+for(let i=1;i<=75;i++){const el=document.createElement('span');el.id='n'+i;el.textContent=i;board.appendChild(el)}
+const nearGrid=document.getElementById('nearGrid');
+let lastWinnerId=null, winnerBusy=false, queuedWinner=null, winnerTimer=null;
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function enterFullscreen(){
+  const hint=document.getElementById('fullscreenHint');
+  try{await document.documentElement.requestFullscreen();document.body.classList.add('telao-ready');document.getElementById('fullscreenGate').hidden=true;}
+  catch(e){hint.textContent='O navegador bloqueou o modo automático. Permita tela cheia e tente novamente.';}
+}
+document.getElementById('fullscreenBtn').addEventListener('click',enterFullscreen);
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){document.body.classList.remove('telao-ready');document.getElementById('fullscreenGate').hidden=false;}});
+
+function renderNear(proximas){
+  const order=[5,4,3,2,1];
+  nearGrid.innerHTML=order.map(f=>{
+    const g=proximas[String(f)]||{total:0,cartelas:[]};
+    const armed=f===1;
+    const chips=g.cartelas.map(c=>`<span>#${String(c.numero).padStart(4,'0')}</span>`).join('');
+    const more=g.total>g.cartelas.length?`<em>+${g.total-g.cartelas.length}</em>`:'';
+    return `<div class="v7-screen-near-group ${armed?'armed':''}"><div><b>${armed?'ARMADAS':'FALTAM '+f}</b><strong>${g.total}</strong></div><section>${chips||'<small>Nenhuma</small>'}${more}</section></div>`;
+  }).join('');
+}
+
+function renderWinnerGrid(w,sorteados){
+  const called=new Set(sorteados||[]); let html='';
+  w.grade.forEach(row=>row.forEach(n=>{const free=n===0; const hit=free||called.has(n); html+=`<span class="${hit?'hit':''} ${free?'free':''}">${free?'<img src="/static/logo_comunidade.png" alt="Logo">':n}</span>`;}));
+  document.getElementById('winGrid').innerHTML=html;
+}
+
+async function showWinner(w,sorteados){
+  if(!w)return;
+  if(winnerBusy){queuedWinner={w,sorteados};return;}
+  winnerBusy=true;
+  const overlay=document.getElementById('winnerOverlay'), bingo=document.getElementById('bingoStage'), detail=document.getElementById('winnerStage');
+  overlay.hidden=false; detail.hidden=true; bingo.hidden=false; bingo.classList.remove('animate'); void bingo.offsetWidth; bingo.classList.add('animate');
+  await wait(1900);
+  bingo.hidden=true;
+  document.getElementById('winNumber').textContent='#'+String(w.numero).padStart(4,'0');
+  document.getElementById('winNumberText').textContent=String(w.numero).padStart(4,'0');
+  document.getElementById('winBuyer').textContent=w.comprador||'Comprador não informado';
+  document.getElementById('winLot').textContent=w.lote||'Sem lote';
+  document.getElementById('winPhone').textContent=w.telefone||'Não informado';
+  document.getElementById('winSeller').textContent=w.vendedor||'Não informado';
+  document.getElementById('winRound').textContent=w.rodada||'—';
+  document.getElementById('winCalled').textContent=w.numeros_chamados??0;
+  document.getElementById('winPrize').textContent=w.premio>0?'PRÊMIO: R$ '+w.premio.toLocaleString('pt-BR',{minimumFractionDigits:2}):'';
+  renderWinnerGrid(w,sorteados); detail.hidden=false;
+  clearTimeout(winnerTimer);
+  winnerTimer=setTimeout(()=>{overlay.hidden=true;detail.hidden=true;winnerBusy=false;if(queuedWinner){const q=queuedWinner;queuedWinner=null;showWinner(q.w,q.sorteados)}},12000);
+}
+
+async function atualizar(){
+  try{
+    const r=await fetch('{{ url_for('api_estado_sorteio') }}',{cache:'no-store'}); const d=await r.json();
+    document.getElementById('evento').textContent=d.evento;
+    document.getElementById('ultimo').textContent=d.ultimo??'—'; document.getElementById('letra').textContent=d.letra||'—';
+    document.getElementById('total').textContent=d.total; document.getElementById('calledSummary').textContent=d.total+' chamado'+(d.total===1?'':'s');
+    for(let i=1;i<=75;i++)document.getElementById('n'+i).classList.toggle('hit',d.sorteados.includes(i));
+    document.getElementById('ultimos').innerHTML=d.ultimos.map(n=>`<span>${n}</span>`).join('');
+    if(d.rodada){document.getElementById('roundname').textContent=d.rodada.nome;document.getElementById('roundpattern').textContent=d.rodada.padrao;document.getElementById('roundprize').textContent=d.rodada.premio>0?'Prêmio R$ '+d.rodada.premio.toLocaleString('pt-BR',{minimumFractionDigits:2}):''}
+    else{document.getElementById('roundname').textContent='Aguardando rodada';document.getElementById('roundpattern').textContent='';document.getElementById('roundprize').textContent=''}
+    renderNear(d.proximas||{});
+    if(d.ganhador && d.ganhador.id!==lastWinnerId){lastWinnerId=d.ganhador.id;showWinner(d.ganhador,d.sorteados)}
+  }catch(e){}
+}
+atualizar();setInterval(atualizar,800);
+</script>
+</body></html>

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Relatórios • Bingo Comunidade{% endblock %}
+{% block page_title %}Relatório do Evento{% endblock %}
+{% block content %}
+<section class="report-hero-v4">
+  <div><span class="eyebrow light">PRESTAÇÃO DE CONTAS</span><h2>{{ evento.nome }}</h2><p>{{ status_evento_label(evento.status) }}{% if evento.data %} • {{ evento.data }}{% endif %}</p></div>
+  <a class="btn btn-light" href="{{ url_for('relatorio_pdf') }}">Baixar relatório em PDF</a>
+</section>
+
+<section class="money-grid-v4">
+  <div class="money-card-v4"><span>Arrecadação bruta</span><strong>R$ {{ '%.2f'|format(dados.arrecadacao) }}</strong><small>{{ dados.vendidas }} cartelas vendidas</small></div>
+  <div class="money-card-v4"><span>Recebido nos acertos</span><strong>R$ {{ '%.2f'|format(dados.total_recebido) }}</strong><small>Valores lançados no financeiro</small></div>
+  <div class="money-card-v4"><span>Saldo a receber</span><strong>R$ {{ '%.2f'|format(dados.saldo_receber) }}</strong><small>Pendente dos vendedores</small></div>
+  <div class="money-card-v4 accent"><span>Resultado estimado</span><strong>R$ {{ '%.2f'|format(dados.resultado_estimado) }}</strong><small>Arrecadação menos prêmios</small></div>
+</section>
+
+<section class="v5-control-strip">
+  <div><span>Estornos registrados</span><strong>{{ dados.estornos }}</strong><small>Cancelamentos rastreados desde a V5</small></div>
+  <div><span>Fechamentos de caixa</span><strong>{{ dados.caixa_fechamentos }}</strong><small>Turnos oficialmente conferidos</small></div>
+  <div><span>Diferença acumulada</span><strong>R$ {{ '%.2f'|format(dados.caixa_diferenca) }}</strong><small>Sobra (+) ou falta (-) nos fechamentos</small></div>
+  <div><span>Último fechamento</span><strong>{% if dados.ultimo_caixa %}R$ {{ '%.2f'|format(dados.ultimo_caixa.valor_informado or 0) }}{% else %}—{% endif %}</strong><small>{% if dados.ultimo_caixa %}{{ dados.ultimo_caixa.fechado_em.replace('T',' ') }}{% else %}Nenhum caixa fechado{% endif %}</small></div>
+</section>
+
+<section class="grid-2">
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">CARTELAS</span><h3>Resumo de vendas</h3></div></div>
+    <div class="report-bars-v4">
+      <div><span>Vendidas</span><b>{{ dados.vendidas }}</b><div class="bar-v4"><i style="width:{{ (dados.vendidas / dados.total * 100) if dados.total else 0 }}%"></i></div></div>
+      <div><span>Não vendidas</span><b>{{ dados.nao_vendidas }}</b><div class="bar-v4 mutedbar"><i style="width:{{ (dados.nao_vendidas / dados.total * 100) if dados.total else 0 }}%"></i></div></div>
+    </div>
+    <div class="payment-list-v4">
+      {% for p in dados.pagamentos %}<div><span>{{ p.forma }}</span><strong>{{ p.qtd }}</strong></div>{% else %}<p class="muted">Nenhuma venda registrada.</p>{% endfor %}
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">PREMIAÇÕES</span><h3>Rodadas</h3></div><span class="badge">R$ {{ '%.2f'|format(dados.premios) }}</span></div>
+    <div class="round-list compact-v4">
+      {% for r in dados.rodadas %}
+      <div class="round-card {% if r.status=='ativa' %}ativa{% endif %}"><div class="round-order">{{ r.ordem }}</div><div><strong>{{ r.nome }}</strong><div class="round-meta"><span>{{ padrao_label(r.padrao) }}</span><span>R$ {{ '%.2f'|format(r.premio) }}</span><span>{{ r.vencedores }} ganhador(es)</span></div></div></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">VENDEDORES</span><h3>Prestação de contas</h3></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Vendedor</th><th>Distribuídas</th><th>Vendidas</th><th>Devido</th><th>Recebido</th><th>Saldo</th></tr></thead><tbody>
+    {% for v in dados.vendedores %}<tr><td><b>{{ v.nome }}</b></td><td>{{ v.distribuidas }}</td><td>{{ v.vendidas }}</td><td>R$ {{ '%.2f'|format(v.devido) }}</td><td>R$ {{ '%.2f'|format(v.recebido) }}</td><td><b>R$ {{ '%.2f'|format(v.saldo) }}</b></td></tr>{% else %}<tr><td colspan="6">Nenhum dado por vendedor.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">GANHADORES</span><h3>Premiações confirmadas</h3></div></div>
+  <div class="winner-grid-v4">
+    {% for g in dados.ganhadores %}<div class="winner-card-v4"><span>Cartela #{{ '%04d'|format(g.numero) }}</span><strong>{{ g.comprador or 'Comprador não informado' }}</strong><small>{{ g.rodada or g.padrao }}{% if g.vendedor %} • {{ g.vendedor }}{% endif %}</small></div>{% else %}<p class="muted">Nenhum ganhador confirmado neste evento.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}
