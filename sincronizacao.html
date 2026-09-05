@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Online / Offline • Bingo Comunidade{% endblock %}
+{% block page_title %}Online + Offline{% endblock %}
+{% block content %}
+<section class="hybrid-hero">
+  <div>
+    <span class="pill">{% if mode=='cloud' %}SERVIDOR ONLINE{% else %}COMPUTADOR DO BINGO{% endif %}</span>
+    <h2>Operação híbrida com contingência</h2>
+    <p>O computador continua funcionando sem internet. Quando a conexão está disponível, vendas remotas e dados do evento são sincronizados com o servidor online.</p>
+  </div>
+  <div class="hybrid-status {% if cfg and cfg.last_sync_ok %}ok{% elif cfg and cfg.enabled %}warn{% else %}off{% endif %}">
+    <span>STATUS DA SINCRONIZAÇÃO</span>
+    <strong>{% if mode=='cloud' %}Servidor online ativo{% elif cfg and cfg.enabled and cfg.last_sync_ok %}🟢 Online e sincronizado{% elif cfg and cfg.enabled %}🔴 Offline / aguardando conexão{% else %}⚪ Não configurado{% endif %}</strong>
+    <small>{% if cfg and cfg.last_sync_em %}Última tentativa: {{ cfg.last_sync_em|brasilia }}{% else %}Nenhuma sincronização realizada{% endif %}</small>
+  </div>
+</section>
+
+<section class="v6-kpi-grid">
+  <div class="v6-kpi"><span>Cartelas</span><strong>{{ total }}</strong><small>Evento atual</small></div>
+  <div class="v6-kpi success"><span>Vendidas</span><strong>{{ vendidas }}</strong><small>Base local</small></div>
+  <div class="v6-kpi"><span>Pendentes</span><strong>{{ pendentes }}</strong><small>Movimentos aguardando nuvem</small></div>
+  <div class="v6-kpi {% if evento and evento.vendas_fechadas_em %}danger{% endif %}"><span>Vendas</span><strong>{% if evento and evento.vendas_fechadas_em %}FECHADAS{% else %}ABERTAS{% endif %}</strong><small>{% if evento and evento.vendas_fechadas_em %}{{ evento.vendas_fechadas_em|brasilia }}{% else %}Recebendo baixas{% endif %}</small></div>
+</section>
+
+{% if mode=='local' %}
+<section class="grid-2">
+  <div class="panel">
+    <span class="eyebrow">SERVIDOR ONLINE</span><h3>Configurar conexão com a nuvem</h3>
+    <form action="{{ url_for('sincronizacao_acao') }}" method="post" class="form-stack">
+      <input type="hidden" name="acao" value="configurar">
+      <label>URL pública do sistema online
+        <input name="remote_url" value="{{ cfg.remote_url or '' }}" placeholder="https://bingo.suacomunidade.com.br">
+      </label>
+      <label>Chave secreta de sincronização
+        <input name="token" type="password" placeholder="{% if cfg.token %}Já configurada — deixe em branco para manter{% else %}Cole a mesma chave do servidor online{% endif %}">
+      </label>
+      <label>Intervalo automático (segundos)
+        <input name="auto_interval" type="number" min="30" max="3600" value="{{ cfg.auto_interval or 60 }}">
+      </label>
+      <label class="check-line"><input type="checkbox" name="enabled" value="1" {% if cfg.enabled %}checked{% endif %}> Habilitar sincronização automática</label>
+      <button class="btn btn-primary">Salvar configuração</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <span class="eyebrow">CONTROLE</span><h3>Sincronizar agora</h3>
+    <p class="muted">{{ cfg.last_sync_msg or 'Ainda não houve uma tentativa de sincronização.' }}</p>
+    <form action="{{ url_for('sincronizacao_acao') }}" method="post">
+      <input type="hidden" name="acao" value="sincronizar">
+      <button class="btn btn-primary">⇅ Sincronizar agora</button>
+    </form>
+    <div class="info-box"><b>Como funciona</b><span>Vendas feitas pelos vendedores na internet descem para este computador. Cadastro de cartelas, lotes e responsáveis sobe do computador para a nuvem.</span></div>
+    <div class="info-box"><b>Sem internet</b><span>O sorteio, telão, conferência, relatórios e banco local continuam funcionando normalmente.</span></div>
+  </div>
+</section>
+
+{% if usuario_atual and usuario_atual.perfil == 'admin' %}
+<div class="panel pre-draw-panel">
+  <div class="panel-head"><div><span class="eyebrow">MANUTENÇÃO DA NUVEM</span><h3>🗑️ Zerar dados de teste do servidor online</h3></div></div>
+  <p class="muted"><b>Use apenas quando quiser reiniciar os testes.</b> Esta ação apaga da nuvem as cartelas, lotes, vendas/estornos, sorteios, ganhadores e filas de sincronização. <b>Não apaga</b> o evento, vendedores, QR/códigos de acesso nem a configuração do servidor.</p>
+  <div class="info-box"><b>Segurança</b><span>Antes da limpeza, o Railway cria automaticamente um backup do banco no volume <code>/data/backups_cloud</code>. O computador local não é apagado. Se ainda houver cartelas locais, elas poderão voltar para a nuvem numa sincronização completa posterior.</span></div>
+  <form action="{{ url_for('sincronizacao_acao') }}" method="post" class="form-stack" onsubmit="return confirm('ATENÇÃO: isso apagará os dados de teste da NUVEM. Deseja continuar?');">
+    <input type="hidden" name="acao" value="zerar_nuvem">
+    <label>Confirmação <small class="hint">Digite exatamente <b>ZERAR NUVEM</b></small>
+      <input name="confirmacao" autocomplete="off" placeholder="ZERAR NUVEM" required>
+    </label>
+    <button class="btn btn-danger">🗑️ Zerar dados de teste da nuvem</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="panel pre-draw-panel">
+  <div class="panel-head"><div><span class="eyebrow">ANTES DO SORTEIO</span><h3>Encerrar vendas e preparar operação offline</h3></div></div>
+  {% if evento and not evento.vendas_fechadas_em %}
+  <p>Este botão tenta uma sincronização completa, cria um backup local e bloqueia novas vendas. Se a internet já tiver caído, o sistema não fecha automaticamente para evitar perder uma venda remota que ainda não chegou ao computador.</p>
+  <form action="{{ url_for('sincronizacao_acao') }}" method="post" class="form-stack">
+    <input type="hidden" name="acao" value="fechar_vendas">
+    <label class="check-line danger-check"><input type="checkbox" name="forcar" value="1"> Contingência: a internet caiu e quero fechar usando a última cópia local, mesmo sem conseguir consultar a nuvem.</label>
+    <button class="btn btn-danger">🔒 Encerrar vendas / Preparar sorteio</button>
+  </form>
+  {% else %}
+  <div class="closed-sales-box"><b>🔒 Vendas encerradas</b><span>O computador está pronto para operar o sorteio sem depender da internet.</span></div>
+  <form action="{{ url_for('sincronizacao_acao') }}" method="post">
+    <input type="hidden" name="acao" value="reabrir_vendas">
+    <button class="btn">Reabrir vendas</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<div class="panel">
+  <span class="eyebrow">NÓ ONLINE</span><h3>Este servidor recebe vendas remotas</h3>
+  <p class="muted">A configuração da URL e da chave é feita no computador local. Este nó online deve ser hospedado em um serviço com armazenamento persistente.</p>
+</div>
+{% endif %}
+{% endblock %}

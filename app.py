@@ -56,7 +56,7 @@ CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
-SYSTEM_BUILD = 'V11.1-HIBRIDO-HORARIO-BRASILIA-2026-09-03'
+SYSTEM_BUILD = 'V11.3-HIBRIDO-RESET-NUVEM-2026-09-04'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
@@ -1123,7 +1123,7 @@ ENDPOINT_PERMISSAO = {
 PUBLIC_ENDPOINTS = {
     'login','logout','static','health','telao','api_estado_sorteio',
     'mobile_home','mobile_vendedor','mobile_selecionar','mobile_sair','mobile_abrir_cartela','mobile_cartela','mobile_comprovante',
-    'api_sync_health','api_sync_snapshot','api_sync_movements','api_sync_events',
+    'api_sync_health','api_sync_snapshot','api_sync_movements','api_sync_events','api_sync_reset_test_data',
 }
 
 
@@ -1276,6 +1276,80 @@ def health():
 
 
 
+def _backup_banco_cloud_antes_reset():
+    """Cria uma cópia consistente do banco da nuvem antes de uma limpeza destrutiva."""
+    pasta = DB_PATH.parent / 'backups_cloud'
+    pasta.mkdir(parents=True, exist_ok=True)
+    nome = f"bingo_cloud_antes_reset_{agora_brasilia().strftime('%Y%m%d_%H%M%S')}.db"
+    destino = pasta / nome
+    origem = get_db()
+    copia = sqlite3.connect(destino)
+    try:
+        origem.backup(copia)
+        copia.commit()
+    finally:
+        copia.close()
+        origem.close()
+    # Mantém somente os 10 backups de reset mais recentes para não consumir o volume.
+    try:
+        antigos = sorted(pasta.glob('bingo_cloud_antes_reset_*.db'), key=lambda p: p.stat().st_mtime, reverse=True)
+        for arq in antigos[10:]:
+            arq.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return destino
+
+
+def _zerar_dados_teste_cloud():
+    """Limpa catálogo/vendas de teste da nuvem, preservando evento, vendedores e credenciais."""
+    backup = _backup_banco_cloud_antes_reset()
+    conn = get_db()
+    tabelas = ['ganhadores','sorteios','movimentacoes_vendas','sync_eventos','sync_recebidos','cartelas','lotes']
+    contagens = {}
+    try:
+        for tabela in tabelas:
+            try:
+                contagens[tabela] = int(conn.execute(f"SELECT COUNT(*) c FROM {tabela}").fetchone()['c'])
+            except Exception:
+                contagens[tabela] = 0
+        # Ordem evita referências lógicas a cartelas/lotes que serão removidos.
+        for tabela in tabelas:
+            conn.execute(f"DELETE FROM {tabela}")
+        # Um novo teste deve começar com vendas abertas no nó online.
+        conn.execute("UPDATE eventos SET vendas_fechadas_em=NULL, vendas_fechadas_por=NULL")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    return backup, contagens
+
+
+@app.route('/api/sync/reset-test-data', methods=['POST'])
+def api_sync_reset_test_data():
+    """Endpoint administrativo protegido pelo token de sincronização para zerar dados de teste na nuvem."""
+    if not _sync_token_valido():
+        return jsonify({'ok':False,'error':'unauthorized'}),401
+    if BINGO_MODE != 'cloud':
+        return jsonify({'ok':False,'message':'Este endpoint só pode ser executado no servidor online.'}),409
+    data = request.get_json(silent=True) or {}
+    if str(data.get('confirmacao') or '').strip() != 'ZERAR NUVEM':
+        return jsonify({'ok':False,'message':'Confirmação inválida. Digite ZERAR NUVEM.'}),400
+    try:
+        backup, contagens = _zerar_dados_teste_cloud()
+        apagados = sum(contagens.values())
+        return jsonify({
+            'ok': True,
+            'message': f'Nuvem zerada com segurança. {apagados} registro(s) de teste removido(s).',
+            'backup': backup.name,
+            'removed': contagens,
+            'time': iso_brasilia(),
+        })
+    except Exception as exc:
+        return jsonify({'ok':False,'message':f'Falha ao zerar a nuvem: {exc}'}),500
+
+
 @app.route('/api/sync/health')
 def api_sync_health():
     if not _sync_token_valido():
@@ -1366,6 +1440,36 @@ def sincronizacao_acao():
         if enabled: start_sync_worker()
     elif acao=='sincronizar':
         r=sync_cycle(full=True); flash(r['message'],'success' if r.get('ok') else 'warning')
+    elif acao=='zerar_nuvem':
+        if not g.usuario or g.usuario['perfil'] != 'admin':
+            flash('Somente o Administrador pode zerar os dados de teste da nuvem.','danger')
+            return redirect(url_for('sincronizacao'))
+        confirmacao=request.form.get('confirmacao','').strip()
+        if confirmacao != 'ZERAR NUVEM':
+            flash('Para confirmar, digite exatamente: ZERAR NUVEM','danger')
+            return redirect(url_for('sincronizacao'))
+        cfg=_sync_cfg(); remote=(cfg['remote_url'] or '').strip().rstrip('/') if cfg else ''; token=(cfg['token'] or '').strip() if cfg else ''
+        if not remote or not token:
+            flash('Configure primeiro a URL e a chave de sincronização do servidor online.','danger')
+            return redirect(url_for('sincronizacao'))
+        try:
+            resp=_http_json('POST',remote+'/api/sync/reset-test-data',{'confirmacao':'ZERAR NUVEM','solicitado_em':iso_brasilia()},token,timeout=30)
+            if not resp.get('ok'):
+                raise RuntimeError(resp.get('message') or 'O servidor online não confirmou a limpeza.')
+            # A fila remota foi zerada. Reinicia o cursor local e impede que movimentos órfãos
+            # (de cartelas apagadas no computador) voltem a ser enviados como conflitos.
+            conn=get_db(); agora=iso_brasilia()
+            conn.execute("UPDATE sync_config SET last_pull_seq=0,last_catalog_em=?,last_sync_em=?,last_sync_ok=1,last_sync_msg=? WHERE id=1",
+                         (agora,agora,'Nuvem zerada. Aguardando novo catálogo local.'))
+            conn.execute("""UPDATE movimentacoes_vendas SET sync_enviado=1
+                            WHERE NOT EXISTS (SELECT 1 FROM cartelas c
+                                              WHERE c.evento_id=movimentacoes_vendas.evento_id
+                                                AND c.numero=movimentacoes_vendas.numero)""")
+            conn.commit(); conn.close()
+            backup=resp.get('backup') or 'backup automático criado'
+            flash(f"Nuvem zerada com sucesso. {resp.get('message','')} Backup: {backup}. Evento, vendedores, QR/códigos e configurações foram preservados.",'success')
+        except Exception as exc:
+            flash(f'Não foi possível zerar a nuvem: {exc}','danger')
     elif acao=='fechar_vendas':
         r=sync_cycle(full=True)
         force=request.form.get('forcar')=='1'
