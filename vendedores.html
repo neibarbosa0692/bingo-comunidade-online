@@ -1,0 +1,49 @@
+{% extends "base.html" %}{% block page_title %}Vendedores{% endblock %}{% block content %}
+<section class="grid-2">
+  <div class="panel"><span class="eyebrow">NOVO VENDEDOR</span><h3>Cadastrar pessoa ou equipe</h3>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="acao" value="cadastrar">
+      <label>Nome<input name="nome" required placeholder="Ex.: Maria / Pastoral do Dízimo"></label>
+      <label>Telefone<input name="telefone" placeholder="(91) 99999-9999"></label>
+      <button class="btn btn-primary">Cadastrar vendedor</button>
+    </form>
+  </div>
+  <div class="panel"><span class="eyebrow">FLUXO HÍBRIDO</span><h3>Cadastro → lote → venda online → sincronização</h3><p class="muted">Cada vendedor recebe um código de acesso online. Depois, entregue um lote exclusivo a ele na tela Distribuição.</p><a class="btn" href="{{ url_for('distribuicao') }}">Ir para distribuição</a> <a class="btn" href="{{ url_for('acesso_movel') }}">Acessos móveis</a></div>
+</section>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">EQUIPE ATIVA</span><h3>Editar ou remover vendedores</h3></div><span class="badge">{{ vendedores|length }} ativo(s)</span></div>
+  <p class="muted">Ao remover um vendedor, as cartelas ainda não vendidas voltam ao estoque e o acesso por QR/código é bloqueado. As vendas e movimentações antigas permanecem no histórico.</p>
+  <div class="table-wrap"><table><thead><tr><th>Nome / telefone</th><th>Código online</th><th>Com vendedor</th><th>Vendidas</th><th>Ações</th></tr></thead><tbody>
+    {% for v in vendedores %}
+    <tr>
+      <td>
+        <form method="post" class="inline-form" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="hidden" name="acao" value="editar"><input type="hidden" name="vendedor_id" value="{{ v.id }}">
+          <input name="nome" value="{{ v.nome }}" required style="min-width:180px">
+          <input name="telefone" value="{{ v.telefone or '' }}" placeholder="Telefone" style="min-width:150px">
+          <button class="btn btn-primary" type="submit">Salvar</button>
+        </form>
+      </td>
+      <td><b class="access-code">{{ v.codigo_acesso or '—' }}</b></td><td>{{ v.recebidas or 0 }}</td><td>{{ v.vendidas or 0 }}</td>
+      <td>
+        <form method="post" onsubmit="return confirm('Remover {{ v.nome }} da equipe? As cartelas não vendidas voltarão ao estoque e o acesso online será bloqueado. O histórico de vendas será preservado.');">
+          <input type="hidden" name="acao" value="excluir"><input type="hidden" name="vendedor_id" value="{{ v.id }}">
+          <button class="btn btn-danger" type="submit">Remover</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}<tr><td colspan="5">Nenhum vendedor ativo cadastrado.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+
+{% if inativos %}
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">ARQUIVADOS</span><h3>Vendedores removidos da equipe</h3></div><span class="badge">{{ inativos|length }}</span></div>
+  <p class="muted">Esses vendedores não podem acessar o sistema nem receber novos lotes, mas continuam vinculados às vendas antigas para preservar a auditoria.</p>
+  <div class="table-wrap"><table><thead><tr><th>Vendedor</th><th>Telefone</th><th>Vendidas no histórico</th><th>Ação</th></tr></thead><tbody>
+  {% for v in inativos %}<tr><td><b>{{ v.nome }}</b></td><td>{{ v.telefone or '—' }}</td><td>{{ v.vendidas or 0 }}</td><td><form method="post"><input type="hidden" name="acao" value="reativar"><input type="hidden" name="vendedor_id" value="{{ v.id }}"><button class="btn" type="submit">Reativar</button></form></td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1664,20 +1664,74 @@ def cartela_qr(numero):
 def vendedores():
     conn=get_db(); evento=evento_ativo(conn)
     if request.method=='POST':
-        nome=request.form['nome'].strip(); telefone=request.form.get('telefone','').strip()
-        if nome:
-            usados={str(r['codigo_acesso']) for r in conn.execute("SELECT codigo_acesso FROM vendedores WHERE codigo_acesso IS NOT NULL").fetchall()}
-            codigo=f"{secrets.randbelow(1000000):06d}"
-            while codigo in usados: codigo=f"{secrets.randbelow(1000000):06d}"
-            conn.execute("INSERT INTO vendedores (nome,telefone,acesso_token,codigo_acesso,online_ativo) VALUES (?,?,?,?,1)", (nome,telefone,secrets.token_urlsafe(24),codigo)); conn.commit(); flash(f'Vendedor cadastrado. Código de acesso online: {codigo}', 'success')
+        acao=request.form.get('acao','cadastrar')
+        if acao=='cadastrar':
+            nome=request.form.get('nome','').strip(); telefone=request.form.get('telefone','').strip()
+            if nome:
+                usados={str(r['codigo_acesso']) for r in conn.execute("SELECT codigo_acesso FROM vendedores WHERE codigo_acesso IS NOT NULL").fetchall()}
+                codigo=f"{secrets.randbelow(1000000):06d}"
+                while codigo in usados: codigo=f"{secrets.randbelow(1000000):06d}"
+                conn.execute("INSERT INTO vendedores (nome,telefone,acesso_token,codigo_acesso,online_ativo) VALUES (?,?,?,?,1)", (nome,telefone,secrets.token_urlsafe(24),codigo))
+                conn.commit(); flash(f'Vendedor cadastrado. Código de acesso online: {codigo}', 'success')
+            else:
+                flash('Informe o nome do vendedor.','warning')
+
+        elif acao=='editar':
+            try: vendedor_id=int(request.form.get('vendedor_id','0'))
+            except ValueError: vendedor_id=0
+            nome=request.form.get('nome','').strip(); telefone=request.form.get('telefone','').strip()
+            vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(vendedor_id,)).fetchone()
+            if not vendedor:
+                flash('Vendedor não encontrado.','danger')
+            elif not nome:
+                flash('O nome do vendedor não pode ficar em branco.','warning')
+            else:
+                conn.execute("UPDATE vendedores SET nome=?,telefone=? WHERE id=?",(nome,telefone,vendedor_id))
+                conn.commit(); flash('Dados do vendedor atualizados. A alteração será enviada para a nuvem na próxima sincronização.','success')
+
+        elif acao=='excluir':
+            try: vendedor_id=int(request.form.get('vendedor_id','0'))
+            except ValueError: vendedor_id=0
+            vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(vendedor_id,)).fetchone()
+            if not vendedor:
+                flash('Vendedor não encontrado.','danger')
+            else:
+                # Não apagamos fisicamente o registro para preservar vendas, comprovantes, acertos e auditoria.
+                # Ele é arquivado, perde o acesso online e deixa de aparecer nas telas de distribuição.
+                devolvidas=conn.execute("UPDATE cartelas SET vendedor_id=NULL WHERE evento_id=? AND vendedor_id=? AND status='disponivel'",(evento['id'],vendedor_id)).rowcount
+                conn.execute("UPDATE lotes SET vendedor_id=NULL,status=CASE WHEN impresso_em IS NULL THEN 'preparado' ELSE 'impresso' END WHERE evento_id=? AND vendedor_id=?",(evento['id'],vendedor_id))
+                conn.execute("UPDATE vendedores SET online_ativo=0 WHERE id=?",(vendedor_id,))
+                conn.commit()
+                flash(f"Vendedor {vendedor['nome']} removido da equipe. {devolvidas} cartela(s) não vendida(s) voltaram ao estoque. O histórico de vendas foi preservado.",'success')
+
+        elif acao=='reativar':
+            try: vendedor_id=int(request.form.get('vendedor_id','0'))
+            except ValueError: vendedor_id=0
+            vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(vendedor_id,)).fetchone()
+            if vendedor:
+                conn.execute("UPDATE vendedores SET online_ativo=1 WHERE id=?",(vendedor_id,)); conn.commit()
+                flash(f"Vendedor {vendedor['nome']} reativado. O mesmo código/QR de acesso continua válido.",'success')
+            else:
+                flash('Vendedor não encontrado.','danger')
+        return redirect(url_for('vendedores'))
+
     rows=conn.execute("""
         SELECT v.*,
           SUM(CASE WHEN c.evento_id=? THEN 1 ELSE 0 END) recebidas,
           SUM(CASE WHEN c.evento_id=? AND c.status='vendida' THEN 1 ELSE 0 END) vendidas
         FROM vendedores v LEFT JOIN cartelas c ON c.vendedor_id=v.id
+        WHERE COALESCE(v.online_ativo,1)=1
         GROUP BY v.id ORDER BY v.nome
     """, (evento['id'], evento['id'])).fetchall()
-    conn.close(); return render_template('vendedores.html', vendedores=rows, evento=evento)
+    inativos=conn.execute("""
+        SELECT v.*,
+          SUM(CASE WHEN c.evento_id=? THEN 1 ELSE 0 END) recebidas,
+          SUM(CASE WHEN c.evento_id=? AND c.status='vendida' THEN 1 ELSE 0 END) vendidas
+        FROM vendedores v LEFT JOIN cartelas c ON c.vendedor_id=v.id
+        WHERE COALESCE(v.online_ativo,1)=0
+        GROUP BY v.id ORDER BY v.nome
+    """, (evento['id'], evento['id'])).fetchall()
+    conn.close(); return render_template('vendedores.html', vendedores=rows, inativos=inativos, evento=evento)
 
 
 @app.route('/distribuicao', methods=['GET','POST'])
@@ -1695,16 +1749,20 @@ def distribuicao():
                 inicio=fim=0
             if fim<inicio: inicio,fim=fim,inicio
             if acao=='atribuir':
-                cur=conn.execute("""UPDATE cartelas SET vendedor_id=?
-                    WHERE evento_id=? AND numero BETWEEN ? AND ? AND status='disponivel'""",
-                    (vendedor_id, evento['id'], inicio, fim))
-                conn.commit(); flash(f'{cur.rowcount} cartelas distribuídas.', 'success')
+                vendedor=conn.execute("SELECT id,nome FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1",(vendedor_id,)).fetchone()
+                if not vendedor:
+                    flash('Selecione um vendedor ativo.','warning')
+                else:
+                    cur=conn.execute("""UPDATE cartelas SET vendedor_id=?
+                        WHERE evento_id=? AND numero BETWEEN ? AND ? AND status='disponivel'""",
+                        (vendedor_id, evento['id'], inicio, fim))
+                    conn.commit(); flash(f'{cur.rowcount} cartelas distribuídas para {vendedor["nome"]}.', 'success')
             elif acao=='devolver_faixa':
                 cur=conn.execute("""UPDATE cartelas SET vendedor_id=NULL
                     WHERE evento_id=? AND vendedor_id=? AND numero BETWEEN ? AND ? AND status='disponivel'""",
                     (evento['id'], vendedor_id, inicio, fim))
                 conn.commit(); flash(f'{cur.rowcount} cartelas devolvidas.', 'success')
-    vend=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall()
+    vend=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
     resumo=conn.execute("""
         SELECT v.id,v.nome,
           SUM(CASE WHEN c.evento_id=? THEN 1 ELSE 0 END) distribuidas,
@@ -1712,6 +1770,7 @@ def distribuicao():
           MIN(CASE WHEN c.evento_id=? THEN c.numero END) inicio,
           MAX(CASE WHEN c.evento_id=? THEN c.numero END) fim
         FROM vendedores v LEFT JOIN cartelas c ON c.vendedor_id=v.id
+        WHERE COALESCE(v.online_ativo,1)=1
         GROUP BY v.id ORDER BY v.nome
     """, (evento['id'],evento['id'],evento['id'],evento['id'])).fetchall()
     conn.close(); return render_template('distribuicao.html', evento=evento, vendedores=vend, resumo=resumo)
@@ -1745,7 +1804,7 @@ def vendas():
                     payload={'sync_uuid':suid,'evento_id':evento['id'],'numero':numero,'tipo':'venda','comprador':comprador,'telefone':telefone,'pagamento':pagamento,'vendedor_id':vendedor_id,'criado_em':agora}
                     _registrar_evento_sync(conn,suid,'venda',evento['id'],numero,payload,'nuvem')
                 conn.commit(); flash(f'Cartela {numero:04d} marcada como vendida.', 'success')
-    vend=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall()
+    vend=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
     recentes=conn.execute("""SELECT c.numero,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
         (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
         (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo='venda' ORDER BY m2.id DESC LIMIT 1) origem
@@ -1824,7 +1883,7 @@ def rodada_acao(rodada_id):
 
 @app.route('/acesso-movel')
 def acesso_movel():
-    conn=get_db(); evento=evento_ativo(conn); vendedores=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall(); conn.close()
+    conn=get_db(); evento=evento_ativo(conn); vendedores=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall(); conn.close()
     return render_template('acesso_movel.html', evento=evento, vendedores=vendedores, base_url=base_url_rede(evento), online_url=_remote_base_url(), ip=local_ip(), mode=BINGO_MODE)
 
 
@@ -1837,7 +1896,7 @@ def acesso_movel_qr():
 
 @app.route('/vendedor/<int:vendedor_id>/acesso.png')
 def vendedor_acesso_qr(vendedor_id):
-    conn=get_db(); evento=evento_ativo(conn); vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?", (vendedor_id,)).fetchone(); conn.close()
+    conn=get_db(); evento=evento_ativo(conn); vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1", (vendedor_id,)).fetchone(); conn.close()
     if not vendedor: return Response(status=404)
     destino=base_url_publico(evento)
     token=vendedor['acesso_token'] or ''
@@ -1850,7 +1909,7 @@ def mobile_home():
     conn=get_db(); evento=evento_ativo(conn); vendedores=conn.execute("SELECT * FROM vendedores WHERE online_ativo=1 ORDER BY nome").fetchall() if BINGO_MODE=='local' else []
     vendedor=None
     if session.get('vendedor_id'):
-        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?", (session['vendedor_id'],)).fetchone()
+        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1", (session['vendedor_id'],)).fetchone()
     vendidas=0; minhas=[]
     if vendedor:
         vendidas=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida'", (evento['id'],vendedor['id'])).fetchone()['c']
@@ -2214,7 +2273,7 @@ def estoque():
             elif acao=='entregar_lote':
                 try: vendedor_id=int(request.form.get('vendedor_id','0'))
                 except ValueError: vendedor_id=0
-                vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(vendedor_id,)).fetchone()
+                vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1",(vendedor_id,)).fetchone()
                 if not vendedor: flash('Selecione um vendedor válido.','warning')
                 else:
                     conn.execute("UPDATE lotes SET vendedor_id=?,status='distribuido' WHERE id=?",(vendedor_id,lote_id))
@@ -2258,7 +2317,7 @@ def estoque():
         SUM(CASE WHEN c.status='inutilizada' THEN 1 ELSE 0 END) inutilizadas
         FROM lotes l LEFT JOIN vendedores v ON v.id=l.vendedor_id LEFT JOIN cartelas c ON c.lote_id=l.id
         WHERE l.evento_id=? GROUP BY l.id ORDER BY l.id DESC""",(eid,)).fetchall()
-    vendedores=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall()
+    vendedores=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
     inutilizadas=conn.execute("""SELECT c.numero,c.inutilizada_em,c.inutilizada_motivo,l.codigo lote FROM cartelas c
         LEFT JOIN lotes l ON l.id=c.lote_id WHERE c.evento_id=? AND c.status='inutilizada' ORDER BY c.numero LIMIT 80""",(eid,)).fetchall()
     minimo=conn.execute("SELECT MIN(numero) n FROM cartelas WHERE evento_id=?",(eid,)).fetchone()['n'] or 1
