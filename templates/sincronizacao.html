@@ -11,7 +11,7 @@
   <div class="hybrid-status {% if cfg and cfg.last_sync_ok %}ok{% elif cfg and cfg.enabled %}warn{% else %}off{% endif %}">
     <span>STATUS DA SINCRONIZAÇÃO</span>
     <strong>{% if mode=='cloud' %}Servidor online ativo{% elif cfg and cfg.enabled and cfg.last_sync_ok %}🟢 Online e sincronizado{% elif cfg and cfg.enabled %}🔴 Offline / aguardando conexão{% else %}⚪ Não configurado{% endif %}</strong>
-    <small>{% if cfg and cfg.last_sync_em %}Última tentativa: {{ cfg.last_sync_em.replace('T',' ') }}{% else %}Nenhuma sincronização realizada{% endif %}</small>
+    <small>{% if cfg and cfg.last_sync_em %}Última tentativa: {{ cfg.last_sync_em|brasilia }}{% else %}Nenhuma sincronização realizada{% endif %}</small>
   </div>
 </section>
 
@@ -19,7 +19,7 @@
   <div class="v6-kpi"><span>Cartelas</span><strong>{{ total }}</strong><small>Evento atual</small></div>
   <div class="v6-kpi success"><span>Vendidas</span><strong>{{ vendidas }}</strong><small>Base local</small></div>
   <div class="v6-kpi"><span>Pendentes</span><strong>{{ pendentes }}</strong><small>Movimentos aguardando nuvem</small></div>
-  <div class="v6-kpi {% if evento and evento.vendas_fechadas_em %}danger{% endif %}"><span>Vendas</span><strong>{% if evento and evento.vendas_fechadas_em %}FECHADAS{% else %}ABERTAS{% endif %}</strong><small>{% if evento and evento.vendas_fechadas_em %}{{ evento.vendas_fechadas_em.replace('T',' ') }}{% else %}Recebendo baixas{% endif %}</small></div>
+  <div class="v6-kpi {% if evento and evento.vendas_fechadas_em %}danger{% endif %}"><span>Vendas</span><strong>{% if evento and evento.vendas_fechadas_em %}FECHADAS{% else %}ABERTAS{% endif %}</strong><small>{% if evento and evento.vendas_fechadas_em %}{{ evento.vendas_fechadas_em|brasilia }}{% else %}Recebendo baixas{% endif %}</small></div>
 </section>
 
 {% if mode=='local' %}

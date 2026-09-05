@@ -29,7 +29,7 @@
     <div id="bingoStage" class="v7-bingo-stage"><span>BINGO!</span></div>
     <div id="winnerStage" class="v7-winner-stage" hidden>
       <div class="v7-winner-card-grid">
-        <div class="v7-winning-ticket"><div class="v7-ticket-top"><span>CARTELA VENCEDORA</span><strong id="winNumber">#0000</strong></div><div class="v7-ticket-cols"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="winGrid" class="v7-ticket-grid"></div></div>
+        <div class="v7-winning-ticket"><div class="v7-ticket-top"><span>CARTELA VENCEDORA</span><strong id="winNumber">0000</strong></div><div class="v7-ticket-cols"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div><div id="winGrid" class="v7-ticket-grid"></div></div>
         <div class="v7-winner-info"><span class="v7-win-kicker">🏆 GANHADOR CONFIRMADO</span><h2 id="winBuyer">Comprador</h2><div class="v7-winner-data"><div><span>Número</span><strong id="winNumberText">—</strong></div><div><span>Lote</span><strong id="winLot">—</strong></div><div><span>Telefone</span><strong id="winPhone">—</strong></div><div><span>Vendedor</span><strong id="winSeller">—</strong></div><div><span>Rodada</span><strong id="winRound">—</strong></div><div><span>Números chamados</span><strong id="winCalled">0</strong></div></div><div id="winPrize" class="v7-win-prize"></div></div>
       </div>
     </div>
@@ -55,7 +55,7 @@ function renderNear(proximas){
   nearGrid.innerHTML=order.map(f=>{
     const g=proximas[String(f)]||{total:0,cartelas:[]};
     const armed=f===1;
-    const chips=g.cartelas.map(c=>`<span>#${String(c.numero).padStart(4,'0')}</span>`).join('');
+    const chips=g.cartelas.map(c=>`<span>${String(c.numero).padStart(4,'0')}</span>`).join('');
     const more=g.total>g.cartelas.length?`<em>+${g.total-g.cartelas.length}</em>`:'';
     return `<div class="v7-screen-near-group ${armed?'armed':''}"><div><b>${armed?'ARMADAS':'FALTAM '+f}</b><strong>${g.total}</strong></div><section>${chips||'<small>Nenhuma</small>'}${more}</section></div>`;
   }).join('');
@@ -75,7 +75,7 @@ async function showWinner(w,sorteados){
   overlay.hidden=false; detail.hidden=true; bingo.hidden=false; bingo.classList.remove('animate'); void bingo.offsetWidth; bingo.classList.add('animate');
   await wait(1900);
   bingo.hidden=true;
-  document.getElementById('winNumber').textContent='#'+String(w.numero).padStart(4,'0');
+  document.getElementById('winNumber').textContent=String(w.numero).padStart(4,'0');
   document.getElementById('winNumberText').textContent=String(w.numero).padStart(4,'0');
   document.getElementById('winBuyer').textContent=w.comprador||'Comprador não informado';
   document.getElementById('winLot').textContent=w.lote||'Sem lote';

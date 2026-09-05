@@ -1,9 +1,9 @@
 <!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Cartela {{ '%04d'|format(card.numero) }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
 <body class="mobile-body"><main class="mobile-shell">
-<header class="mobile-top"><div class="mobile-brand">B</div><div><span>{{ evento.nome }}</span><h1>Cartela #{{ '%04d'|format(card.numero) }}</h1></div></header>
+<header class="mobile-top"><div class="mobile-brand">B</div><div><span>{{ evento.nome }}</span><h1>Cartela {{ '%04d'|format(card.numero) }}</h1></div></header>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
 {% if vendas_fechadas %}<div class="mobile-closed-banner">🔒 Vendas encerradas para o sorteio</div>{% endif %}
-<div class="mobile-ticket-status {{ card.status }}"><span>{% if card.status=='vendida' %}VENDIDA{% elif card.status=='inutilizada' %}INUTILIZADA{% else %}DISPONÍVEL{% endif %}</span><strong>#{{ '%04d'|format(card.numero) }}</strong></div>
+<div class="mobile-ticket-status {{ card.status }}"><span>{% if card.status=='vendida' %}VENDIDA{% elif card.status=='inutilizada' %}INUTILIZADA{% else %}DISPONÍVEL{% endif %}</span><strong>{{ '%04d'|format(card.numero) }}</strong></div>
 <div class="mobile-bingo-grid"><div class="mobile-bingo-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div>{% for row in grade %}<div class="mobile-bingo-row">{% for n in row %}<span class="{% if n==0 %}free logo-free{% endif %}">{% if n==0 %}<img src="{{ url_for('static', filename='logo_comunidade.png') }}" alt="Logo">{% else %}{{ n }}{% endif %}</span>{% endfor %}</div>{% endfor %}</div>
 {% if card.status == 'disponivel' %}
   {% if vendas_fechadas %}

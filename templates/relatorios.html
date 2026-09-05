@@ -18,7 +18,7 @@
   <div><span>Estornos registrados</span><strong>{{ dados.estornos }}</strong><small>Cancelamentos rastreados desde a V5</small></div>
   <div><span>Fechamentos de caixa</span><strong>{{ dados.caixa_fechamentos }}</strong><small>Turnos oficialmente conferidos</small></div>
   <div><span>Diferença acumulada</span><strong>R$ {{ '%.2f'|format(dados.caixa_diferenca) }}</strong><small>Sobra (+) ou falta (-) nos fechamentos</small></div>
-  <div><span>Último fechamento</span><strong>{% if dados.ultimo_caixa %}R$ {{ '%.2f'|format(dados.ultimo_caixa.valor_informado or 0) }}{% else %}—{% endif %}</strong><small>{% if dados.ultimo_caixa %}{{ dados.ultimo_caixa.fechado_em.replace('T',' ') }}{% else %}Nenhum caixa fechado{% endif %}</small></div>
+  <div><span>Último fechamento</span><strong>{% if dados.ultimo_caixa %}R$ {{ '%.2f'|format(dados.ultimo_caixa.valor_informado or 0) }}{% else %}—{% endif %}</strong><small>{% if dados.ultimo_caixa %}{{ dados.ultimo_caixa.fechado_em|brasilia }}{% else %}Nenhum caixa fechado{% endif %}</small></div>
 </section>
 
 <section class="grid-2">
@@ -52,7 +52,7 @@
 <div class="panel">
   <div class="panel-head"><div><span class="eyebrow">GANHADORES</span><h3>Premiações confirmadas</h3></div></div>
   <div class="winner-grid-v4">
-    {% for g in dados.ganhadores %}<div class="winner-card-v4"><span>Cartela #{{ '%04d'|format(g.numero) }}</span><strong>{{ g.comprador or 'Comprador não informado' }}</strong><small>{{ g.rodada or g.padrao }}{% if g.vendedor %} • {{ g.vendedor }}{% endif %}</small></div>{% else %}<p class="muted">Nenhum ganhador confirmado neste evento.</p>{% endfor %}
+    {% for g in dados.ganhadores %}<div class="winner-card-v4"><span>Cartela {{ '%04d'|format(g.numero) }}</span><strong>{{ g.comprador or 'Comprador não informado' }}</strong><small>{{ g.rodada or g.padrao }}{% if g.vendedor %} • {{ g.vendedor }}{% endif %}</small></div>{% else %}<p class="muted">Nenhum ganhador confirmado neste evento.</p>{% endfor %}
   </div>
 </div>
 {% endblock %}

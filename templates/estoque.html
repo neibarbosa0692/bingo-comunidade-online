@@ -12,14 +12,10 @@
 
 <section class="grid-2">
   <div class="panel v6-feature-panel">
-    <span class="eyebrow">NOVO LOTE FÍSICO</span><h3>Organizar uma faixa de cartelas</h3>
-    <form method="post" class="form-stack">
-      <input type="hidden" name="acao" value="criar_lote">
-      <label>Código do lote <small class="hint">Pode deixar vazio para gerar automaticamente.</small><input name="codigo" placeholder="Ex.: LOTE-A01"></label>
-      <div class="range-form"><label>De<input type="number" name="inicio" value="{{ minimo }}" required></label><label>Até<input type="number" name="fim" value="{{ maximo }}" required></label></div>
-      <label>Observação<input name="observacao" placeholder="Ex.: Bloco para equipe da cozinha"></label>
-      <button class="btn btn-primary">Criar lote</button>
-    </form>
+    <span class="eyebrow">LOTES AUTOMÁTICOS</span><h3>As cartelas já chegam separadas</h3>
+    <p>Ao gerar novas cartelas, o sistema cria automaticamente lotes de <b>10 cartelas</b>, com códigos sequenciais como <b>LOTE-001</b>, <b>LOTE-002</b> e assim por diante.</p>
+    <p class="muted">Aqui você não precisa mais montar as faixas manualmente. Use a lista abaixo apenas para imprimir e distribuir cada lote ao vendedor responsável.</p>
+    <a class="btn btn-primary" href="{{ url_for('cartelas') }}">Gerar novas cartelas</a>
   </div>
   <div class="panel">
     <span class="eyebrow">CARTELA DANIFICADA / PERDIDA</span><h3>Inutilizar sem apagar o histórico</h3>
@@ -38,9 +34,9 @@
   <div class="v6-lote-list">
     {% for l in lotes %}
     <article class="v6-lote-card">
-      <div class="v6-lote-head"><div><span class="v6-lote-code">{{ l.codigo }}</span><h4>#{{ '%04d'|format(l.inicio) }} a #{{ '%04d'|format(l.fim) }}</h4></div><span class="v6-state {{ l.status }}">{{ l.status }}</span></div>
+      <div class="v6-lote-head"><div><span class="v6-lote-code">{{ l.codigo }}</span><h4>{{ '%04d'|format(l.inicio) }} a {{ '%04d'|format(l.fim) }}</h4></div><span class="v6-state {{ l.status }}">{{ l.status }}</span></div>
       <div class="v6-lote-stats"><span><b>{{ l.qtd or 0 }}</b>Total</span><span><b>{{ l.disponiveis or 0 }}</b>Disponíveis</span><span><b>{{ l.vendidas or 0 }}</b>Vendidas</span><span><b>{{ l.inutilizadas or 0 }}</b>Inutilizadas</span></div>
-      <div class="v6-lote-meta"><span>Responsável: <b>{{ l.vendedor or 'Estoque central' }}</b></span><span>Impressão: <b>{{ l.impresso_em.replace('T',' ') if l.impresso_em else 'Ainda não marcada' }}</b></span>{% if l.observacao %}<span>{{ l.observacao }}</span>{% endif %}</div>
+      <div class="v6-lote-meta"><span>Responsável: <b>{{ l.vendedor or 'Estoque central' }}</b></span><span>Impressão: <b>{{ l.impresso_em|brasilia if l.impresso_em else 'Ainda não marcada' }}</b></span>{% if l.observacao %}<span>{{ l.observacao }}</span>{% endif %}</div>
       <div class="v6-lote-actions">
         <a class="btn btn-primary" href="{{ url_for('lote_pdf',lote_id=l.id) }}">PDF - TEMPLATE OFICIAL</a>
         {% if not l.impresso_em %}<form method="post"><input type="hidden" name="acao" value="marcar_impresso"><input type="hidden" name="lote_id" value="{{ l.id }}"><button class="btn btn-primary">Marcar impresso</button></form>{% endif %}
@@ -49,9 +45,9 @@
         {% if l.status!='fechado' %}<form method="post"><input type="hidden" name="acao" value="fechar_lote"><input type="hidden" name="lote_id" value="{{ l.id }}"><button class="btn">Fechar lote</button></form>{% endif %}
       </div>
     </article>
-    {% else %}<div class="empty-v6"><b>Nenhum lote criado.</b><span>Crie lotes para organizar os blocos físicos, impressão e entrega aos vendedores.</span></div>{% endfor %}
+    {% else %}<div class="empty-v6"><b>Nenhum lote criado.</b><span>Gere cartelas na tela Cartelas; os lotes serão criados automaticamente em grupos de 10.</span></div>{% endfor %}
   </div>
 </div>
 
-{% if inutilizadas %}<div class="panel"><div class="panel-head"><div><span class="eyebrow">INUTILIZADAS</span><h3>Cartelas fora de circulação</h3></div></div><div class="table-wrap"><table><thead><tr><th>Cartela</th><th>Lote</th><th>Data</th><th>Motivo</th><th>Ação</th></tr></thead><tbody>{% for c in inutilizadas %}<tr><td><b>#{{ '%04d'|format(c.numero) }}</b></td><td>{{ c.lote or '—' }}</td><td>{{ c.inutilizada_em.replace('T',' ') if c.inutilizada_em else '—' }}</td><td>{{ c.inutilizada_motivo or '—' }}</td><td><form method="post"><input type="hidden" name="acao" value="reativar"><input type="hidden" name="numero" value="{{ c.numero }}"><button class="btn">Reativar</button></form></td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+{% if inutilizadas %}<div class="panel"><div class="panel-head"><div><span class="eyebrow">INUTILIZADAS</span><h3>Cartelas fora de circulação</h3></div></div><div class="table-wrap"><table><thead><tr><th>Cartela</th><th>Lote</th><th>Data</th><th>Motivo</th><th>Ação</th></tr></thead><tbody>{% for c in inutilizadas %}<tr><td><b>{{ '%04d'|format(c.numero) }}</b></td><td>{{ c.lote or '—' }}</td><td>{{ c.inutilizada_em|brasilia if c.inutilizada_em else '—' }}</td><td>{{ c.inutilizada_motivo or '—' }}</td><td><form method="post"><input type="hidden" name="acao" value="reativar"><input type="hidden" name="numero" value="{{ c.numero }}"><button class="btn">Reativar</button></form></td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
 {% endblock %}

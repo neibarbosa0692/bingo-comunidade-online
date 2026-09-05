@@ -7,10 +7,10 @@
 
 {% if q %}<div class="panel"><div class="panel-head"><div><span class="eyebrow">RESULTADOS</span><h3>{{ resultados|length }} ocorrência(s) para “{{ q }}”</h3></div></div><div class="v6-search-results">
 {% for r in resultados %}<article class="v6-result-card">
-  <div class="v6-result-num">#{{ '%04d'|format(r.numero) }}</div>
+  <div class="v6-result-num">{{ '%04d'|format(r.numero) }}</div>
   <div class="v6-result-main"><strong>{{ r.comprador or 'Comprador não informado' }}</strong><span>{{ r.telefone or 'Telefone não informado' }}</span><small>{{ r.evento_nome }} • {{ r.vendedor or 'Sem vendedor' }}{% if r.lote %} • Lote {{ r.lote }}{% endif %}</small></div>
   <span class="v6-status {{ r.status }}">{{ status_cartela_label(r.status) }}</span>
   <div class="v6-result-actions">{% if r.status=='vendida' %}<a class="btn" target="_blank" href="{{ url_for('mobile_cartela',evento_id=r.evento_id,numero=r.numero) }}">Abrir cartela</a>{% endif %}{% if r.status=='vendida' %}<a class="btn btn-primary" href="{{ url_for('mobile_comprovante',evento_id=r.evento_id,numero=r.numero) }}">Comprovante</a>{% endif %}</div>
 </article>{% else %}<div class="empty-v6"><b>Nenhum resultado.</b><span>Confira a grafia, o telefone ou o número da cartela.</span></div>{% endfor %}
-</div></div>{% else %}<div class="panel v6-search-help"><span class="eyebrow">DICAS</span><h3>O que você pode pesquisar?</h3><div class="action-grid"><div class="action-card"><b>Número da cartela</b><span>Digite 347 para localizar a cartela #0347.</span></div><div class="action-card"><b>Nome do comprador</b><span>Pode usar apenas parte do nome.</span></div><div class="action-card"><b>Telefone / WhatsApp</b><span>A busca aceita o telefone como foi cadastrado.</span></div><div class="action-card"><b>Histórico de eventos</b><span>Marque “Todos os bingos” para buscar em eventos anteriores.</span></div></div></div>{% endif %}
+</div></div>{% else %}<div class="panel v6-search-help"><span class="eyebrow">DICAS</span><h3>O que você pode pesquisar?</h3><div class="action-grid"><div class="action-card"><b>Número da cartela</b><span>Digite 347 para localizar a cartela 0347.</span></div><div class="action-card"><b>Nome do comprador</b><span>Pode usar apenas parte do nome.</span></div><div class="action-card"><b>Telefone / WhatsApp</b><span>A busca aceita o telefone como foi cadastrado.</span></div><div class="action-card"><b>Histórico de eventos</b><span>Marque “Todos os bingos” para buscar em eventos anteriores.</span></div></div></div>{% endif %}
 {% endblock %}

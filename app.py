@@ -6,7 +6,7 @@ import socket
 import shutil
 from pathlib import Path
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import secrets
@@ -56,7 +56,7 @@ CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
-SYSTEM_BUILD = 'V11-HIBRIDO-ONLINE-OFFLINE-2026-09-02'
+SYSTEM_BUILD = 'V11.1-HIBRIDO-HORARIO-BRASILIA-2026-09-03'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
@@ -69,6 +69,41 @@ DEFAULT_CARD_PRIZES = [
     'Sanduicheira + Batedeira',
     'Cesta Básica + Liquidificador Turbo',
 ]
+
+# Horário oficial usado pelo sistema. Brasília permanece em UTC-3.
+BRASILIA_TZ = timezone(timedelta(hours=-3), name='BRT')
+
+def agora_brasilia():
+    return datetime.now(BRASILIA_TZ)
+
+def iso_brasilia():
+    return agora_brasilia().isoformat(timespec='seconds')
+
+def _datetime_brasilia(valor, origem=''):
+    if not valor:
+        return None
+    try:
+        bruto = str(valor).strip().replace('Z', '+00:00')
+        dt = datetime.fromisoformat(bruto)
+        if dt.tzinfo is None:
+            # Registros antigos criados no Railway eram gravados como UTC sem offset.
+            if str(origem or '').strip().lower() in {'nuvem','remoto','cloud','railway'}:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.replace(tzinfo=BRASILIA_TZ)
+        return dt.astimezone(BRASILIA_TZ)
+    except Exception:
+        return None
+
+def formatar_brasilia(valor, origem=''):
+    dt = _datetime_brasilia(valor, origem)
+    if not dt:
+        return str(valor or '—').replace('T',' ')
+    return dt.strftime('%d/%m/%Y %H:%M:%S') + ' (Brasília)'
+
+@app.template_filter('brasilia')
+def filtro_brasilia(valor, origem=''):
+    return formatar_brasilia(valor, origem)
 
 
 def get_db():
@@ -283,7 +318,7 @@ def init_db():
     conn.execute("UPDATE eventos SET organizador_cartela=? WHERE organizador_cartela IS NULL OR organizador_cartela=''", (COMMUNITY_NAME,))
     conn.execute("UPDATE eventos SET horario_cartela=? WHERE horario_cartela IS NULL OR horario_cartela=''", (DEFAULT_CARD_TIME,))
     conn.execute("UPDATE eventos SET premios_cartela=? WHERE premios_cartela IS NULL OR premios_cartela=''", ('\n'.join(DEFAULT_CARD_PRIZES),))
-    conn.execute("UPDATE eventos SET criado_em=? WHERE criado_em IS NULL OR criado_em=''", (datetime.now().isoformat(timespec='seconds'),))
+    conn.execute("UPDATE eventos SET criado_em=? WHERE criado_em IS NULL OR criado_em=''", (iso_brasilia(),))
     cols_ganhadores = {r['name'] for r in conn.execute("PRAGMA table_info(ganhadores)").fetchall()}
     if 'rodada_id' not in cols_ganhadores:
         conn.execute("ALTER TABLE ganhadores ADD COLUMN rodada_id INTEGER")
@@ -342,14 +377,14 @@ def init_db():
     if conn.execute("SELECT COUNT(*) c FROM usuarios").fetchone()['c'] == 0:
         conn.execute("""INSERT INTO usuarios (nome,usuario,senha_hash,perfil,ativo,obrigar_troca,criado_em)
             VALUES (?,?,?,?,1,1,?)""",
-            ('Administrador', 'admin', generate_password_hash('admin123'), 'admin', datetime.now().isoformat(timespec='seconds')))
+            ('Administrador', 'admin', generate_password_hash('admin123'), 'admin', iso_brasilia()))
 
     evento = conn.execute("SELECT * FROM eventos ORDER BY id DESC LIMIT 1").fetchone()
     if not evento:
         conn.execute(
             """INSERT INTO eventos (nome, data, valor_cartela, modalidade, ativo, status, criado_em, organizador_cartela, horario_cartela, premios_cartela)
                VALUES (?, ?, ?, ?, 1, 'preparacao', ?, ?, ?, ?)""",
-            ("Ação Entre Amigos", "2026-11-07", 15.0, 75, datetime.now().isoformat(timespec='seconds'),
+            ("Ação Entre Amigos", "2026-11-07", 15.0, 75, iso_brasilia(),
              COMMUNITY_NAME, DEFAULT_CARD_TIME, '\n'.join(DEFAULT_CARD_PRIZES))
         )
         conn.commit()
@@ -486,7 +521,7 @@ def _sync_atualizar_status(ok, mensagem, catalog=False):
     if BINGO_MODE != 'local':
         return
     try:
-        conn = get_db(); agora = datetime.now().isoformat(timespec='seconds')
+        conn = get_db(); agora = iso_brasilia()
         if catalog:
             conn.execute("UPDATE sync_config SET last_sync_em=?,last_sync_ok=?,last_sync_msg=?,last_catalog_em=? WHERE id=1",
                          (agora, 1 if ok else 0, str(mensagem)[:500], agora))
@@ -510,7 +545,7 @@ def _snapshot_local():
     lotes = [dict(r) for r in conn.execute("SELECT * FROM lotes WHERE evento_id=? ORDER BY id", (eid,)).fetchall()]
     cartelas = [dict(r) for r in conn.execute("SELECT * FROM cartelas WHERE evento_id=? ORDER BY numero", (eid,)).fetchall()]
     conn.close()
-    return {'build':SYSTEM_BUILD,'gerado_em':datetime.now().isoformat(timespec='seconds'),'evento':ed,
+    return {'build':SYSTEM_BUILD,'gerado_em':iso_brasilia(),'evento':ed,
             'vendedores':vendedores,'lotes':lotes,'cartelas':cartelas}
 
 
@@ -530,7 +565,7 @@ def _cloud_aplicar_snapshot(snapshot):
         conn.execute("""INSERT INTO eventos (id,nome,data,valor_cartela,modalidade,ativo,status,criado_em,url_rede,organizador_cartela,horario_cartela,premios_cartela,vendas_fechadas_em,vendas_fechadas_por)
                      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                      (eid,evento.get('nome') or 'Bingo',evento.get('data'),evento.get('valor_cartela',10),evento.get('modalidade',75),evento.get('ativo',1),
-                      evento.get('status','preparacao'),evento.get('criado_em') or datetime.now().isoformat(timespec='seconds'),evento.get('url_rede'),
+                      evento.get('status','preparacao'),evento.get('criado_em') or iso_brasilia(),evento.get('url_rede'),
                       evento.get('organizador_cartela'),evento.get('horario_cartela'),evento.get('premios_cartela'),evento.get('vendas_fechadas_em'),evento.get('vendas_fechadas_por')))
     if evento.get('ativo'):
         conn.execute("UPDATE eventos SET ativo=CASE WHEN id=? THEN 1 ELSE 0 END", (eid,))
@@ -549,7 +584,7 @@ def _cloud_aplicar_snapshot(snapshot):
         if not l.get('id'): continue
         atual=conn.execute("SELECT id FROM lotes WHERE id=?",(l['id'],)).fetchone()
         vals=(l.get('evento_id',eid),l.get('codigo') or f"L{l['id']}",l.get('inicio',0),l.get('fim',0),l.get('status','preparado'),
-              l.get('observacao'),l.get('vendedor_id'),l.get('criado_por'),l.get('criado_em') or datetime.now().isoformat(timespec='seconds'),l.get('impresso_em'),l['id'])
+              l.get('observacao'),l.get('vendedor_id'),l.get('criado_por'),l.get('criado_em') or iso_brasilia(),l.get('impresso_em'),l['id'])
         if atual:
             conn.execute("UPDATE lotes SET evento_id=?,codigo=?,inicio=?,fim=?,status=?,observacao=?,vendedor_id=?,criado_por=?,criado_em=?,impresso_em=? WHERE id=?",vals)
         else:
@@ -591,7 +626,7 @@ def _garantir_uuid_movimento(conn, movimento_id):
 
 def _registrar_evento_sync(conn, uid, tipo, evento_id, numero, payload, origem):
     conn.execute("INSERT OR IGNORE INTO sync_eventos (uuid,tipo,evento_id,numero,payload,origem,criado_em) VALUES (?,?,?,?,?,?,?)",
-                 (uid,tipo,evento_id,numero,json.dumps(payload,ensure_ascii=False),origem,datetime.now().isoformat(timespec='seconds')))
+                 (uid,tipo,evento_id,numero,json.dumps(payload,ensure_ascii=False),origem,iso_brasilia()))
 
 
 def _aplicar_movimento_recebido(conn, mov, origem='remoto'):
@@ -604,7 +639,7 @@ def _aplicar_movimento_recebido(conn, mov, origem='remoto'):
     card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?",(eid,numero)).fetchone()
     if not card:
         return False, f'Cartela {numero:04d} não existe.'
-    agora=mov.get('criado_em') or datetime.now().isoformat(timespec='seconds')
+    agora=mov.get('criado_em') or iso_brasilia()
     if tipo=='venda':
         if card['status']=='vendida':
             # Venda idêntica é idempotente; venda diferente vira conflito.
@@ -623,7 +658,7 @@ def _aplicar_movimento_recebido(conn, mov, origem='remoto'):
         conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,motivo,criado_em,origem,sync_uuid,sync_enviado)
                      VALUES (?,?,?,?,?,?,?,?,NULL,?,?,?,?,1)""",
                      (eid,card['id'],numero,tipo,mov.get('comprador'),mov.get('telefone'),mov.get('pagamento'),mov.get('vendedor_id'),mov.get('motivo'),agora,origem,uid))
-    conn.execute("INSERT OR IGNORE INTO sync_recebidos (uuid,origem,recebido_em) VALUES (?,?,?)",(uid,origem,datetime.now().isoformat(timespec='seconds')))
+    conn.execute("INSERT OR IGNORE INTO sync_recebidos (uuid,origem,recebido_em) VALUES (?,?,?)",(uid,origem,iso_brasilia()))
     return True, 'ok'
 
 
@@ -687,7 +722,7 @@ def sync_cycle(full=False):
             catalog=True
         else:
             try:
-                dt=datetime.fromisoformat(last_cat); catalog=(datetime.now()-dt).total_seconds()>=300
+                dt=_datetime_brasilia(last_cat); catalog=(agora_brasilia()-dt).total_seconds()>=300 if dt else True
             except Exception:
                 catalog=True
         # O catálogo sobe primeiro. Assim, uma cartela recém-criada já existe na nuvem
@@ -730,7 +765,7 @@ def start_sync_worker():
 
 def criar_backup_fechamento(evento_id):
     pasta=Path(__file__).with_name('backups'); pasta.mkdir(exist_ok=True)
-    destino=pasta/f"pre_sorteio_evento_{evento_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    destino=pasta/f"pre_sorteio_evento_{evento_id}_{agora_brasilia().strftime('%Y%m%d_%H%M%S')}.db"
     origem=sqlite3.connect(DB_PATH); alvo=sqlite3.connect(destino)
     try:
         origem.backup(alvo)
@@ -1115,7 +1150,7 @@ def gravar_auditoria(acao, entidade='', detalhes='', usuario_id=None, usuario_no
     try:
         conn = get_db()
         conn.execute("""INSERT INTO auditoria (evento_id,usuario_id,usuario_nome,acao,entidade,detalhes,ip,criado_em)
-            VALUES (?,?,?,?,?,?,?,?)""", (evento_id, usuario_id, usuario_nome, acao, entidade, detalhes, ip, datetime.now().isoformat(timespec='seconds')))
+            VALUES (?,?,?,?,?,?,?,?)""", (evento_id, usuario_id, usuario_nome, acao, entidade, detalhes, ip, iso_brasilia()))
         conn.commit(); conn.close()
     except Exception:
         pass
@@ -1245,7 +1280,7 @@ def health():
 def api_sync_health():
     if not _sync_token_valido():
         return jsonify({'ok':False,'error':'unauthorized'}),401
-    return jsonify({'ok':True,'build':SYSTEM_BUILD,'mode':BINGO_MODE,'time':datetime.now().isoformat(timespec='seconds')})
+    return jsonify({'ok':True,'build':SYSTEM_BUILD,'mode':BINGO_MODE,'time':iso_brasilia()})
 
 
 @app.route('/api/sync/snapshot', methods=['POST'])
@@ -1337,7 +1372,7 @@ def sincronizacao_acao():
         if not r.get('ok') and not force:
             flash('Não fechei as vendas porque a nuvem não foi sincronizada. Se a internet realmente acabou, marque a opção de contingência para usar a última cópia local.','danger')
             return redirect(url_for('sincronizacao'))
-        conn=get_db(); evento=evento_ativo(conn); backup=criar_backup_fechamento(evento['id']); agora=datetime.now().isoformat(timespec='seconds')
+        conn=get_db(); evento=evento_ativo(conn); backup=criar_backup_fechamento(evento['id']); agora=iso_brasilia()
         conn.execute("UPDATE eventos SET vendas_fechadas_em=?,vendas_fechadas_por=? WHERE id=?",(agora,usuario_atual_id(),evento['id'])); conn.commit(); conn.close()
         if r.get('ok'):
             r2=sync_cycle(full=True)
@@ -1391,25 +1426,78 @@ def evento():
     conn.close(); return render_template('evento.html', evento=evento)
 
 
+LOTE_TAMANHO_AUTOMATICO = 10
+
+
+def _proximo_codigo_lote_automatico(conn, evento_id):
+    """Retorna um código sequencial LOTE-001, LOTE-002... sem colidir com códigos existentes."""
+    maior = 0
+    rows = conn.execute("SELECT codigo FROM lotes WHERE evento_id=?", (evento_id,)).fetchall()
+    for row in rows:
+        codigo = str(row['codigo'] or '').strip().upper()
+        if codigo.startswith('LOTE-'):
+            sufixo = codigo[5:]
+            if sufixo.isdigit():
+                maior = max(maior, int(sufixo))
+    seq = maior + 1
+    while conn.execute("SELECT 1 FROM lotes WHERE evento_id=? AND codigo=?", (evento_id, f'LOTE-{seq:03d}')).fetchone():
+        seq += 1
+    return f'LOTE-{seq:03d}'
+
+
+def _criar_lotes_automaticos(conn, evento_id, inicio, fim):
+    """Vincula a faixa recém-gerada a lotes automáticos de até 10 cartelas."""
+    criados = []
+    lote_inicio = inicio
+    while lote_inicio <= fim:
+        lote_fim = min(lote_inicio + LOTE_TAMANHO_AUTOMATICO - 1, fim)
+        codigo = _proximo_codigo_lote_automatico(conn, evento_id)
+        cur = conn.execute(
+            "INSERT INTO lotes (evento_id,codigo,inicio,fim,status,observacao,criado_por,criado_em) VALUES (?,?,?,?, 'preparado',?,?,?)",
+            (evento_id, codigo, lote_inicio, lote_fim, 'Criado automaticamente na geração das cartelas', usuario_atual_id(), iso_brasilia())
+        )
+        conn.execute(
+            "UPDATE cartelas SET lote_id=? WHERE evento_id=? AND numero BETWEEN ? AND ?",
+            (cur.lastrowid, evento_id, lote_inicio, lote_fim)
+        )
+        criados.append((codigo, lote_inicio, lote_fim))
+        lote_inicio = lote_fim + 1
+    return criados
+
+
 @app.route('/cartelas', methods=['GET','POST'])
 def cartelas():
     conn = get_db(); evento = evento_ativo(conn)
     if request.method == 'POST':
-        qtd = max(1, min(int(request.form.get('quantidade', 100)), 5000))
+        try:
+            qtd = int(request.form.get('quantidade', 100))
+        except (TypeError, ValueError):
+            qtd = 100
+        qtd = max(1, min(qtd, 5000))
         existentes = conn.execute("SELECT numeros FROM cartelas WHERE evento_id=?", (evento['id'],)).fetchall()
         assinaturas = {r['numeros'] for r in existentes}
         inicio = conn.execute("SELECT COALESCE(MAX(numero),0)+1 n FROM cartelas WHERE evento_id=?", (evento['id'],)).fetchone()['n']
         geradas = 0; numero = inicio
         while geradas < qtd:
             grade = gerar_cartela_75(); assinatura = json.dumps(grade)
-            if assinatura in assinaturas: continue
+            if assinatura in assinaturas:
+                continue
             conn.execute("INSERT INTO cartelas (evento_id, numero, numeros) VALUES (?, ?, ?)", (evento['id'], numero, assinatura))
             assinaturas.add(assinatura); numero += 1; geradas += 1
-        conn.commit(); flash(f'{geradas} cartelas geradas.', 'success')
+
+        fim_geracao = numero - 1
+        lotes_criados = _criar_lotes_automaticos(conn, evento['id'], inicio, fim_geracao)
+        conn.commit()
+        if geradas % LOTE_TAMANHO_AUTOMATICO == 0:
+            detalhe = f'{len(lotes_criados)} lote(s) de {LOTE_TAMANHO_AUTOMATICO} cartelas'
+        else:
+            detalhe = f'{len(lotes_criados)} lote(s), com até {LOTE_TAMANHO_AUTOMATICO} cartelas por lote'
+        flash(f'{geradas} cartelas geradas e separadas automaticamente em {detalhe}.', 'success')
 
     cards = conn.execute("""
-        SELECT c.*, v.nome vendedor FROM cartelas c
+        SELECT c.*, v.nome vendedor, l.codigo lote FROM cartelas c
         LEFT JOIN vendedores v ON v.id=c.vendedor_id
+        LEFT JOIN lotes l ON l.id=c.lote_id
         WHERE c.evento_id=? ORDER BY c.numero LIMIT 120
     """, (evento['id'],)).fetchall()
     total = conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=?", (evento['id'],)).fetchone()['c']
@@ -1544,7 +1632,7 @@ def vendas():
                 flash(f'Cartela {numero:04d} está sob responsabilidade de um vendedor externo. Para evitar venda duplicada durante uma queda de internet, a baixa deve ser feita pelo vendedor responsável.', 'danger')
             else:
                 vendedor_id=vendedor_form if vendedor_form is not None else card['vendedor_id']
-                agora=datetime.now().isoformat(timespec='seconds'); uid=usuario_atual_id(); suid=_novo_sync_uuid()
+                agora=iso_brasilia(); uid=usuario_atual_id(); suid=_novo_sync_uuid()
                 conn.execute("""UPDATE cartelas SET status='vendida', comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
                              (comprador, telefone, pagamento, vendedor_id, agora, uid, card['id']))
                 conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
@@ -1555,7 +1643,8 @@ def vendas():
                 conn.commit(); flash(f'Cartela {numero:04d} marcada como vendida.', 'success')
     vend=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall()
     recentes=conn.execute("""SELECT c.numero,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
-        (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id
+        (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
+        (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo='venda' ORDER BY m2.id DESC LIMIT 1) origem
         FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id WHERE c.evento_id=? AND c.status='vendida'
         ORDER BY COALESCE(c.vendido_em,'' ) DESC,c.id DESC LIMIT 20""", (evento['id'],)).fetchall()
     historico=conn.execute("""SELECT m.*,v.nome vendedor,u.nome usuario_nome FROM movimentacoes_vendas m
@@ -1574,7 +1663,7 @@ def financeiro():
         obs=request.form.get('observacao','').strip(); forma_pagamento=request.form.get('forma_pagamento','').strip()
         if valor>0:
             conn.execute("INSERT INTO acertos (evento_id,vendedor_id,valor,observacao,criado_em,forma_pagamento) VALUES (?,?,?,?,?,?)",
-                         (evento['id'], vendedor_id, valor, obs, datetime.now().isoformat(timespec='seconds'),forma_pagamento))
+                         (evento['id'], vendedor_id, valor, obs, iso_brasilia(),forma_pagamento))
             conn.commit(); flash('Recebimento registrado.', 'success')
     vendedores=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall(); resumo=[]
     for v in vendedores:
@@ -1738,7 +1827,7 @@ def mobile_cartela(evento_id, numero):
             flash('Esta cartela não está disponível para venda.','warning')
         else:
             comprador=request.form.get('comprador','').strip(); telefone=request.form.get('telefone','').strip(); pagamento=request.form.get('pagamento','').strip()
-            vendedor_id=vendedor['id']; agora=datetime.now().isoformat(timespec='seconds'); suid=_novo_sync_uuid()
+            vendedor_id=vendedor['id']; agora=iso_brasilia(); suid=_novo_sync_uuid()
             conn.execute("UPDATE cartelas SET status='vendida',comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?",
                          (comprador,telefone,pagamento,vendedor_id,agora,card['id']))
             cur=conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
@@ -1948,7 +2037,7 @@ def _comprovante_venda_pdf(evento, mov, vendedor=None, usuario=None, cancelada=F
     x=22*mm; y=ph-26*mm
     pdf.setFillColor(PRIMARY); pdf.setFont('Helvetica-Bold',22); pdf.drawString(x,y,'Comprovante de venda'); y-=9*mm
     pdf.setFillColor(TEXT); pdf.setFont('Helvetica-Bold',13); pdf.drawString(x,y,evento['nome'][:70]); y-=7*mm
-    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',9); pdf.drawString(x,y,f"Cartela #{int(mov['numero']):04d} • Referência B{evento['id']}-V{mov['id']:06d}"); y-=13*mm
+    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',9); pdf.drawString(x,y,f"Cartela {int(mov['numero']):04d} • Referência B{evento['id']}-V{mov['id']:06d}"); y-=13*mm
     if cancelada:
         pdf.setFillColor(HexColor('#B02A3B')); pdf.setFont('Helvetica-Bold',12); pdf.drawString(x,y,'VENDA CANCELADA / ESTORNADA'); y-=10*mm
     dados=[
@@ -1957,7 +2046,7 @@ def _comprovante_venda_pdf(evento, mov, vendedor=None, usuario=None, cancelada=F
         ('Pagamento', mov['pagamento'] or 'Não informado'),
         ('Vendedor', vendedor['nome'] if vendedor else 'Venda direta / não informado'),
         ('Registrado por', usuario['nome'] if usuario else ('Acesso pelo celular' if (mov['origem'] or '')=='celular' else 'Sistema local')),
-        ('Data e hora', (mov['criado_em'] or '').replace('T',' ')),
+        ('Data e hora', formatar_brasilia(mov['criado_em'], mov['origem'] or '')),
         ('Valor da cartela', _pdf_money(evento['valor_cartela'])),
     ]
     for label,value in dados:
@@ -1967,7 +2056,7 @@ def _comprovante_venda_pdf(evento, mov, vendedor=None, usuario=None, cancelada=F
     qr=qr_image(payload); qbuf=BytesIO(); qr.save(qbuf,format='PNG'); qbuf.seek(0)
     pdf.drawImage(ImageReader(qbuf),pw-58*mm,ph-82*mm,32*mm,32*mm,mask='auto')
     pdf.setFillColor(MUTED); pdf.setFont('Helvetica',7); pdf.drawString(x,24*mm,'Este comprovante confirma o registro da venda no Bingo Comunidade. A cartela física continua sendo o documento de participação.')
-    pdf.drawString(x,18*mm,f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} • Bingo Comunidade V11")
+    pdf.drawString(x,18*mm,f"Gerado em {agora_brasilia().strftime('%d/%m/%Y %H:%M')} • Horário de Brasília • Bingo Comunidade V11.1")
     pdf.save(); buf.seek(0); return buf
 
 
@@ -1976,11 +2065,11 @@ def _comprovante_acerto_pdf(evento, acerto, vendedor):
     x=22*mm; y=ph-28*mm
     pdf.setFillColor(PRIMARY); pdf.setFont('Helvetica-Bold',22); pdf.drawString(x,y,'Recibo de acerto'); y-=10*mm
     pdf.setFillColor(TEXT); pdf.setFont('Helvetica-Bold',13); pdf.drawString(x,y,evento['nome'][:70]); y-=15*mm
-    itens=[('Vendedor / equipe',vendedor['nome']),('Valor recebido',_pdf_money(acerto['valor'])),('Forma de pagamento',acerto['forma_pagamento'] or 'Não informada'),('Data e hora',(acerto['criado_em'] or '').replace('T',' ')),('Observação',acerto['observacao'] or '—'),('Referência',f"B{evento['id']}-A{acerto['id']:06d}")]
+    itens=[('Vendedor / equipe',vendedor['nome']),('Valor recebido',_pdf_money(acerto['valor'])),('Forma de pagamento',acerto['forma_pagamento'] or 'Não informada'),('Data e hora',formatar_brasilia(acerto['criado_em'])),('Observação',acerto['observacao'] or '—'),('Referência',f"B{evento['id']}-A{acerto['id']:06d}")]
     for label,value in itens:
         pdf.setFillColor(MUTED); pdf.setFont('Helvetica-Bold',8); pdf.drawString(x,y,label.upper());
         pdf.setFillColor(TEXT); pdf.setFont('Helvetica',11); pdf.drawString(x,y-5*mm,str(value)[:90]); y-=15*mm
-    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',7); pdf.drawString(x,18*mm,f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} • Bingo Comunidade V11")
+    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',7); pdf.drawString(x,18*mm,f"Gerado em {agora_brasilia().strftime('%d/%m/%Y %H:%M')} • Horário de Brasília • Bingo Comunidade V11.1")
     pdf.save(); buf.seek(0); return buf
 
 
@@ -2005,7 +2094,7 @@ def estoque():
             elif duplicado:
                 flash('Já existe um lote com esse código neste evento.','warning')
             else:
-                cur=conn.execute("INSERT INTO lotes (evento_id,codigo,inicio,fim,status,observacao,criado_por,criado_em) VALUES (?,?,?,?, 'preparado',?,?,?)",(eid,codigo,inicio,fim,request.form.get('observacao','').strip(),usuario_atual_id(),datetime.now().isoformat(timespec='seconds')))
+                cur=conn.execute("INSERT INTO lotes (evento_id,codigo,inicio,fim,status,observacao,criado_por,criado_em) VALUES (?,?,?,?, 'preparado',?,?,?)",(eid,codigo,inicio,fim,request.form.get('observacao','').strip(),usuario_atual_id(),iso_brasilia()))
                 conn.execute("UPDATE cartelas SET lote_id=? WHERE evento_id=? AND numero BETWEEN ? AND ?",(cur.lastrowid,eid,inicio,fim))
                 conn.commit(); flash(f'Lote {codigo} criado com {existentes} cartelas.','success')
         elif acao in {'marcar_impresso','entregar_lote','devolver_lote','fechar_lote'}:
@@ -2015,7 +2104,7 @@ def estoque():
             if not lote:
                 flash('Lote não encontrado.','danger')
             elif acao=='marcar_impresso':
-                agora=datetime.now().isoformat(timespec='seconds')
+                agora=iso_brasilia()
                 conn.execute("UPDATE lotes SET status=CASE WHEN status='preparado' THEN 'impresso' ELSE status END, impresso_em=COALESCE(impresso_em,?) WHERE id=?",(agora,lote_id))
                 conn.execute("UPDATE cartelas SET impressa_em=COALESCE(impressa_em,?) WHERE evento_id=? AND lote_id=?",(agora,eid,lote_id)); conn.commit(); flash('Lote marcado como impresso.','success')
             elif acao=='entregar_lote':
@@ -2040,7 +2129,7 @@ def estoque():
             elif card['status']=='vendida': flash('Uma cartela vendida não pode ser inutilizada. Primeiro estorne a venda, se necessário.','warning')
             elif card['status']=='inutilizada': flash('Esta cartela já está inutilizada.','warning')
             else:
-                conn.execute("UPDATE cartelas SET status='inutilizada',vendedor_id=NULL,inutilizada_em=?,inutilizada_motivo=? WHERE id=?",(datetime.now().isoformat(timespec='seconds'),motivo,card['id'])); conn.commit(); flash(f'Cartela {numero:04d} inutilizada.','success')
+                conn.execute("UPDATE cartelas SET status='inutilizada',vendedor_id=NULL,inutilizada_em=?,inutilizada_motivo=? WHERE id=?",(iso_brasilia(),motivo,card['id'])); conn.commit(); flash(f'Cartela {numero:04d} inutilizada.','success')
         elif acao=='reativar':
             try: numero=int(request.form.get('numero','0'))
             except ValueError: numero=0
@@ -2212,7 +2301,7 @@ def eventos():
         if nome:
             conn.execute("UPDATE eventos SET ativo=0")
             cur=conn.execute("""INSERT INTO eventos (nome,data,valor_cartela,modalidade,ativo,status,criado_em,organizador_cartela,horario_cartela,premios_cartela)
-                VALUES (?,?,?,?,1,'preparacao',?,?,?,?)""", (nome,data,valor,75,datetime.now().isoformat(timespec='seconds'),organizador,horario,premios))
+                VALUES (?,?,?,?,1,'preparacao',?,?,?,?)""", (nome,data,valor,75,iso_brasilia(),organizador,horario,premios))
             criar_rodadas_padrao(conn, cur.lastrowid)
             conn.commit(); flash('Novo evento criado e selecionado.', 'success')
             return redirect(url_for('dashboard'))
@@ -2264,7 +2353,7 @@ def evento_excluir(evento_id):
         else:
             cur=conn.execute("""INSERT INTO eventos (nome,data,valor_cartela,modalidade,ativo,status,criado_em,organizador_cartela,horario_cartela,premios_cartela)
                 VALUES (?,?,?,75,1,'preparacao',?,?,?,?)""",
-                ('Ação Entre Amigos','2026-11-07',15.0,datetime.now().isoformat(timespec='seconds'),COMMUNITY_NAME,DEFAULT_CARD_TIME,'\n'.join(DEFAULT_CARD_PRIZES)))
+                ('Ação Entre Amigos','2026-11-07',15.0,iso_brasilia(),COMMUNITY_NAME,DEFAULT_CARD_TIME,'\n'.join(DEFAULT_CARD_PRIZES)))
             criar_rodadas_padrao(conn,cur.lastrowid)
     conn.commit(); conn.close(); flash(f"Evento ‘{alvo['nome']}’ excluído.", 'warning'); return redirect(url_for('eventos'))
 
@@ -2296,11 +2385,11 @@ def evento_status(evento_id):
         if caixa_aberto:
             flash('Existe um caixa aberto. Faça o fechamento do caixa antes de encerrar oficialmente o evento.', 'warning')
             conn.close(); return redirect(url_for('caixa'))
-        conn.execute("UPDATE eventos SET status='encerrado', encerrado_em=? WHERE id=?", (datetime.now().isoformat(timespec='seconds'),evento_id))
+        conn.execute("UPDATE eventos SET status='encerrado', encerrado_em=? WHERE id=?", (iso_brasilia(),evento_id))
         conn.commit()
         try:
             pasta=Path(__file__).with_name('backups'); pasta.mkdir(exist_ok=True)
-            destino=pasta/f"fechamento_evento_{evento_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            destino=pasta/f"fechamento_evento_{evento_id}_{agora_brasilia().strftime('%Y%m%d_%H%M%S')}.db"
             origem_db=sqlite3.connect(DB_PATH); copia_db=sqlite3.connect(destino)
             try: origem_db.backup(copia_db)
             finally: copia_db.close(); origem_db.close()
@@ -2379,7 +2468,7 @@ def relatorio_pdf():
             line(f"Cartela {g['numero']:04d} — {g['rodada'] or g['padrao']}", g['comprador'] or 'Comprador não informado')
     else:
         line('Ganhadores confirmados','Nenhum')
-    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',7); pdf.drawString(18*mm,10*mm,f"Gerado pelo Bingo Comunidade V11 em {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    pdf.setFillColor(MUTED); pdf.setFont('Helvetica',7); pdf.drawString(18*mm,10*mm,f"Gerado pelo Bingo Comunidade V11.1 em {agora_brasilia().strftime('%d/%m/%Y %H:%M:%S')} (Brasília)")
     pdf.save(); buf.seek(0)
     safe=''.join(ch if ch.isalnum() else '_' for ch in evento['nome'])[:45]
     return send_file(buf,mimetype='application/pdf',as_attachment=True,download_name=f'relatorio_{safe}.pdf')
@@ -2391,7 +2480,7 @@ def listar_backups():
     BACKUP_DIR.mkdir(exist_ok=True)
     rows=[]
     for p in sorted(BACKUP_DIR.glob('*.db'), key=lambda x:x.stat().st_mtime, reverse=True):
-        st=p.stat(); rows.append({'nome':p.name,'tamanho':st.st_size,'data':datetime.fromtimestamp(st.st_mtime).strftime('%d/%m/%Y %H:%M')})
+        st=p.stat(); rows.append({'nome':p.name,'tamanho':st.st_size,'data':datetime.fromtimestamp(st.st_mtime, BRASILIA_TZ).strftime('%d/%m/%Y %H:%M')})
     return rows
 
 
@@ -2404,7 +2493,7 @@ def backups():
 @app.route('/backups/criar', methods=['POST'])
 def backup_criar():
     BACKUP_DIR.mkdir(exist_ok=True)
-    stamp=datetime.now().strftime('%Y%m%d_%H%M%S')
+    stamp=agora_brasilia().strftime('%Y%m%d_%H%M%S')
     destino=BACKUP_DIR/f'bingo_backup_{stamp}.db'
     src=sqlite3.connect(DB_PATH); dst=sqlite3.connect(destino)
     try:
@@ -2439,7 +2528,7 @@ def backup_restaurar(nome):
     if not p:
         flash('Backup não encontrado.','danger'); return redirect(url_for('backups'))
     BACKUP_DIR.mkdir(exist_ok=True)
-    seguranca=BACKUP_DIR/f"antes_da_restauracao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    seguranca=BACKUP_DIR/f"antes_da_restauracao_{agora_brasilia().strftime('%Y%m%d_%H%M%S')}.db"
     if DB_PATH.exists():
         src=sqlite3.connect(DB_PATH); dst=sqlite3.connect(seguranca)
         try: src.backup(dst)
@@ -2460,7 +2549,7 @@ def backup_upload():
     if not nome.lower().endswith('.db'):
         flash('O arquivo precisa ter extensão .db.','danger'); return redirect(url_for('backups'))
     BACKUP_DIR.mkdir(exist_ok=True)
-    destino=BACKUP_DIR/f"importado_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{nome}"
+    destino=BACKUP_DIR/f"importado_{agora_brasilia().strftime('%Y%m%d_%H%M%S')}_{nome}"
     arq.save(destino)
     try:
         teste=sqlite3.connect(destino); teste.execute('SELECT name FROM sqlite_master LIMIT 1').fetchone(); teste.close()
@@ -2531,7 +2620,7 @@ def usuarios():
         else:
             try:
                 conn.execute("""INSERT INTO usuarios (nome,usuario,senha_hash,perfil,ativo,obrigar_troca,criado_em)
-                    VALUES (?,?,?,?,1,1,?)""", (nome,usuario,generate_password_hash(senha),perfil,datetime.now().isoformat(timespec='seconds')))
+                    VALUES (?,?,?,?,1,1,?)""", (nome,usuario,generate_password_hash(senha),perfil,iso_brasilia()))
                 conn.commit(); flash('Usuário criado. A senha informada será temporária e deverá ser trocada no primeiro acesso.', 'success')
             except sqlite3.IntegrityError:
                 flash('Esse nome de usuário já está em uso.', 'danger')
@@ -2578,7 +2667,7 @@ def venda_cancelar(numero):
     if not card or card['status']!='vendida':
         conn.close(); flash('A cartela informada não possui uma venda ativa.', 'warning'); return redirect(url_for('vendas'))
     motivo=request.form.get('motivo','').strip() or 'Cancelamento/estorno'
-    agora=datetime.now().isoformat(timespec='seconds'); suid=_novo_sync_uuid()
+    agora=iso_brasilia(); suid=_novo_sync_uuid()
     conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,motivo,criado_em,origem,sync_uuid,sync_enviado)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (evento['id'],card['id'],numero,'cancelamento',card['comprador'],card['telefone'],card['pagamento'],card['vendedor_id'],usuario_atual_id(),motivo,agora,'painel',suid,0 if BINGO_MODE=='local' else 1))
     conn.execute("""UPDATE cartelas SET status='disponivel',comprador=NULL,telefone=NULL,pagamento=NULL,vendido_em=NULL,vendido_por_usuario_id=NULL WHERE id=?""", (card['id'],))
@@ -2613,7 +2702,7 @@ def caixa():
         if acao=='abrir' and not aberto:
             try: inicial=float(request.form.get('valor_inicial','0').replace(',','.'))
             except ValueError: inicial=0
-            conn.execute("INSERT INTO caixas (evento_id,aberto_por,aberto_em,valor_inicial,status) VALUES (?,?,?,?, 'aberto')", (eid,usuario_atual_id(),datetime.now().isoformat(timespec='seconds'),max(inicial,0)))
+            conn.execute("INSERT INTO caixas (evento_id,aberto_por,aberto_em,valor_inicial,status) VALUES (?,?,?,?, 'aberto')", (eid,usuario_atual_id(),iso_brasilia(),max(inicial,0)))
             conn.commit(); flash('Caixa aberto.', 'success')
         elif acao=='movimento' and aberto:
             tipo=request.form.get('tipo','entrada'); descricao=request.form.get('descricao','').strip()
@@ -2622,13 +2711,13 @@ def caixa():
             if tipo not in {'entrada','saida'} or valor<=0 or not descricao:
                 flash('Informe tipo, descrição e um valor válido.', 'warning')
             else:
-                conn.execute("INSERT INTO caixa_movimentos (caixa_id,evento_id,tipo,descricao,valor,usuario_id,criado_em) VALUES (?,?,?,?,?,?,?)", (aberto['id'],eid,tipo,descricao,valor,usuario_atual_id(),datetime.now().isoformat(timespec='seconds')))
+                conn.execute("INSERT INTO caixa_movimentos (caixa_id,evento_id,tipo,descricao,valor,usuario_id,criado_em) VALUES (?,?,?,?,?,?,?)", (aberto['id'],eid,tipo,descricao,valor,usuario_atual_id(),iso_brasilia()))
                 conn.commit(); flash('Movimento registrado no caixa.', 'success')
         elif acao=='fechar' and aberto:
             try: contado=float(request.form.get('valor_informado','0').replace(',','.'))
             except ValueError: contado=0
             obs=request.form.get('observacao','').strip(); esperado,_,_,_,_=_caixa_valor_sistema(conn,aberto,evento); dif=contado-esperado
-            conn.execute("""UPDATE caixas SET status='fechado',fechado_por=?,fechado_em=?,valor_informado=?,valor_sistema=?,diferenca=?,observacao=? WHERE id=?""", (usuario_atual_id(),datetime.now().isoformat(timespec='seconds'),contado,esperado,dif,obs,aberto['id']))
+            conn.execute("""UPDATE caixas SET status='fechado',fechado_por=?,fechado_em=?,valor_informado=?,valor_sistema=?,diferenca=?,observacao=? WHERE id=?""", (usuario_atual_id(),iso_brasilia(),contado,esperado,dif,obs,aberto['id']))
             conn.commit(); flash(f'Caixa fechado. Diferença: R$ {dif:.2f}.', 'success')
         return redirect(url_for('caixa'))
     aberto=conn.execute("SELECT * FROM caixas WHERE evento_id=? AND status='aberto' ORDER BY id DESC LIMIT 1", (eid,)).fetchone()
