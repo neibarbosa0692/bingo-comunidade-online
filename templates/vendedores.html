@@ -1,3 +1,141 @@
 {% extends "base.html" %}{% block page_title %}Vendedores{% endblock %}{% block content %}
-<section class="grid-2"><div class="panel"><span class="eyebrow">NOVO VENDEDOR</span><h3>Cadastrar pessoa ou equipe</h3><form method="post" class="form-stack"><label>Nome<input name="nome" required placeholder="Ex.: Maria / Pastoral do Dízimo"></label><label>Telefone<input name="telefone" placeholder="(91) 99999-9999"></label><button class="btn btn-primary">Cadastrar vendedor</button></form></div><div class="panel"><span class="eyebrow">FLUXO HÍBRIDO</span><h3>Cadastro → lote → venda online → sincronização</h3><p class="muted">Cada vendedor recebe um código de acesso online. Depois, entregue um lote exclusivo a ele na tela Distribuição.</p><a class="btn" href="{{ url_for('distribuicao') }}">Ir para distribuição</a> <a class="btn" href="{{ url_for('acesso_movel') }}">Acessos móveis</a></div></section>
-<div class="panel"><div class="panel-head"><div><span class="eyebrow">EQUIPE</span><h3>Desempenho e acesso remoto</h3></div></div><div class="table-wrap"><table><thead><tr><th>Vendedor</th><th>Telefone</th><th>Código online</th><th>Com vendedor</th><th>Vendidas</th></tr></thead><tbody>{% for v in vendedores %}<tr><td><b>{{ v.nome }}</b></td><td>{{ v.telefone or '—' }}</td><td><b class="access-code">{{ v.codigo_acesso or '—' }}</b></td><td>{{ v.recebidas or 0 }}</td><td>{{ v.vendidas or 0 }}</td></tr>{% else %}<tr><td colspan="5">Nenhum vendedor cadastrado.</td></tr>{% endfor %}</tbody></table></div></div>{% endblock %}
+<section class="grid-2">
+  <div class="panel"><span class="eyebrow">NOVO VENDEDOR</span><h3>Cadastrar pessoa ou equipe</h3>
+    <form method="post" class="form-stack">
+      <input type="hidden" name="acao" value="cadastrar">
+      <label>Nome<input name="nome" required placeholder="Ex.: Maria / Pastoral do Dízimo"></label>
+      <label>Telefone<input name="telefone" placeholder="(91) 99999-9999"></label>
+      <button class="btn btn-primary">Cadastrar vendedor</button>
+    </form>
+  </div>
+  <div class="panel"><span class="eyebrow">FLUXO HÍBRIDO</span><h3>Cadastro → lote → venda online → sincronização</h3><p class="muted">Cada vendedor recebe um código de acesso online. Depois, entregue um lote exclusivo a ele na tela Distribuição.</p><a class="btn" href="{{ url_for('distribuicao') }}">Ir para distribuição</a> <a class="btn" href="{{ url_for('acesso_movel') }}">Acessos móveis</a></div>
+</section>
+
+<div class="panel seller-panel">
+  <div class="panel-head seller-head">
+    <div><span class="eyebrow">EQUIPE ATIVA</span><h3>Vendedores cadastrados</h3></div>
+    <span class="badge" id="seller-active-badge">{{ vendedores|length }} ativo(s)</span>
+  </div>
+
+  <div class="seller-toolbar">
+    <div class="seller-search-wrap">
+      <span class="seller-search-icon" aria-hidden="true">⌕</span>
+      <input id="seller-search" class="seller-search" type="search" placeholder="Buscar vendedor por nome, telefone ou código..." autocomplete="off" aria-label="Buscar vendedor">
+      <button type="button" class="seller-clear" id="seller-clear" aria-label="Limpar busca" title="Limpar busca">×</button>
+    </div>
+    <span class="seller-result-count" id="seller-result-count">{{ vendedores|length }} encontrado(s)</span>
+  </div>
+
+  <p class="muted seller-help">Use a busca para localizar rapidamente um vendedor. A edição abre em uma janela compacta e a exclusão pede confirmação.</p>
+
+  <div class="table-wrap seller-table-wrap">
+    <table class="seller-table">
+      <thead><tr><th>Vendedor</th><th>Telefone</th><th>Código online</th><th>Com vendedor</th><th>Vendidas</th><th class="seller-actions-col">Ações</th></tr></thead>
+      <tbody id="seller-active-body">
+        {% for v in vendedores %}
+        <tr class="seller-row" data-search="{{ (v.nome ~ ' ' ~ (v.telefone or '') ~ ' ' ~ (v.codigo_acesso or ''))|lower|e }}">
+          <td><b>{{ v.nome }}</b></td>
+          <td>{{ v.telefone or '—' }}</td>
+          <td><b class="access-code">{{ v.codigo_acesso or '—' }}</b></td>
+          <td>{{ v.recebidas or 0 }}</td>
+          <td>{{ v.vendidas or 0 }}</td>
+          <td class="seller-actions">
+            <button type="button" class="btn seller-action-btn" data-edit-seller data-id="{{ v.id }}" data-name="{{ v.nome|e }}" data-phone="{{ (v.telefone or '')|e }}" title="Editar {{ v.nome }}">✎ <span>Editar</span></button>
+            <form method="post" class="seller-delete-form" onsubmit="return confirm('Excluir {{ v.nome|e }} da equipe? As cartelas não vendidas voltarão ao estoque, o acesso online será bloqueado e o histórico de vendas será preservado.');">
+              <input type="hidden" name="acao" value="excluir"><input type="hidden" name="vendedor_id" value="{{ v.id }}">
+              <button class="btn btn-danger seller-action-btn" type="submit" title="Excluir {{ v.nome }}">🗑 <span>Excluir</span></button>
+            </form>
+          </td>
+        </tr>
+        {% else %}<tr class="seller-empty-static"><td colspan="6">Nenhum vendedor ativo cadastrado.</td></tr>{% endfor %}
+        <tr id="seller-no-results" class="seller-no-results" hidden><td colspan="6"><b>Nenhum vendedor encontrado.</b><br><span class="muted">Tente outro nome, telefone ou código.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if inativos %}
+<details class="panel seller-archived" id="seller-archived-panel">
+  <summary class="seller-archived-summary">
+    <div><span class="eyebrow">ARQUIVADOS</span><strong>Vendedores removidos</strong><small>Histórico preservado e acesso bloqueado.</small></div>
+    <span class="badge">{{ inativos|length }}</span>
+  </summary>
+  <div class="seller-archived-content">
+    <div class="table-wrap"><table><thead><tr><th>Vendedor</th><th>Telefone</th><th>Vendidas no histórico</th><th>Ação</th></tr></thead><tbody>
+    {% for v in inativos %}<tr class="seller-archived-row" data-search="{{ (v.nome ~ ' ' ~ (v.telefone or '') ~ ' ' ~ (v.codigo_acesso or ''))|lower|e }}"><td><b>{{ v.nome }}</b></td><td>{{ v.telefone or '—' }}</td><td>{{ v.vendidas or 0 }}</td><td><form method="post"><input type="hidden" name="acao" value="reativar"><input type="hidden" name="vendedor_id" value="{{ v.id }}"><button class="btn" type="submit">Reativar</button></form></td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</details>
+{% endif %}
+
+<dialog id="seller-edit-dialog" class="seller-dialog">
+  <form method="post" class="seller-dialog-card" id="seller-edit-form">
+    <input type="hidden" name="acao" value="editar">
+    <input type="hidden" name="vendedor_id" id="edit-seller-id">
+    <div class="seller-dialog-head">
+      <div><span class="eyebrow">EDITAR VENDEDOR</span><h3 id="edit-seller-title">Dados do vendedor</h3></div>
+      <button type="button" class="seller-dialog-close" data-close-seller-dialog aria-label="Fechar">×</button>
+    </div>
+    <div class="form-stack seller-dialog-fields">
+      <label>Nome<input name="nome" id="edit-seller-name" required autocomplete="name"></label>
+      <label>Telefone<input name="telefone" id="edit-seller-phone" placeholder="(91) 99999-9999" autocomplete="tel"></label>
+    </div>
+    <div class="seller-dialog-actions">
+      <button type="button" class="btn" data-close-seller-dialog>Cancelar</button>
+      <button class="btn btn-primary" type="submit">Salvar alterações</button>
+    </div>
+  </form>
+</dialog>
+
+<style>
+.seller-panel{overflow:visible}.seller-head{gap:16px}.seller-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:16px 0 10px}.seller-search-wrap{position:relative;display:flex;align-items:center;flex:1;max-width:650px}.seller-search{width:100%;min-height:46px;padding:10px 42px 10px 42px;border:1px solid #dfe4ef;border-radius:14px;background:#fff;font:inherit;outline:none}.seller-search:focus{border-color:#6d55f5;box-shadow:0 0 0 3px rgba(109,85,245,.10)}.seller-search-icon{position:absolute;left:15px;font-size:22px;color:#68738b;pointer-events:none}.seller-clear{position:absolute;right:10px;border:0;background:transparent;font-size:25px;line-height:1;color:#7d879a;cursor:pointer;padding:4px 8px;border-radius:8px}.seller-clear:hover{background:#f0f2f7}.seller-result-count{font-size:13px;color:#6f7890;white-space:nowrap}.seller-help{margin-top:5px}.seller-table-wrap{margin-top:8px}.seller-table td,.seller-table th{vertical-align:middle}.seller-actions-col{min-width:190px}.seller-actions{display:flex;align-items:center;gap:7px;white-space:nowrap}.seller-delete-form{margin:0}.seller-action-btn{padding:8px 11px;min-height:36px}.seller-no-results td{text-align:center;padding:28px 12px}.seller-archived{padding:0;overflow:hidden}.seller-archived-summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;cursor:pointer}.seller-archived-summary::-webkit-details-marker{display:none}.seller-archived-summary>div{display:grid;gap:3px}.seller-archived-summary strong{font-size:18px}.seller-archived-summary small{color:#6f7890}.seller-archived-content{padding:0 24px 24px}.seller-dialog{border:0;padding:0;border-radius:20px;box-shadow:0 25px 80px rgba(20,28,45,.25);width:min(520px,calc(100vw - 28px));color:inherit}.seller-dialog::backdrop{background:rgba(15,23,42,.48);backdrop-filter:blur(2px)}.seller-dialog-card{padding:24px;margin:0;background:#fff}.seller-dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}.seller-dialog-head h3{margin:5px 0 0}.seller-dialog-close{border:0;background:#f2f4f8;border-radius:10px;width:38px;height:38px;font-size:25px;line-height:1;cursor:pointer;color:#536078}.seller-dialog-fields{gap:14px}.seller-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}@media(max-width:760px){.seller-toolbar{align-items:stretch;flex-direction:column}.seller-search-wrap{max-width:none}.seller-result-count{align-self:flex-end}.seller-actions{flex-direction:column;align-items:stretch}.seller-action-btn{width:100%;justify-content:center}.seller-actions-col{min-width:120px}.seller-table th:nth-child(3),.seller-table td:nth-child(3){display:none}}
+</style>
+
+<script>
+(function(){
+  const search=document.getElementById('seller-search');
+  const clear=document.getElementById('seller-clear');
+  const rows=[...document.querySelectorAll('#seller-active-body .seller-row')];
+  const archived=[...document.querySelectorAll('.seller-archived-row')];
+  const count=document.getElementById('seller-result-count');
+  const noResults=document.getElementById('seller-no-results');
+  const archivedPanel=document.getElementById('seller-archived-panel');
+
+  const normalize=(value)=>(value||'').toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  function applySearch(){
+    const q=normalize(search ? search.value : '');
+    let visible=0;
+    rows.forEach(row=>{
+      const match=!q || normalize(row.dataset.search).includes(q);
+      row.hidden=!match;
+      if(match) visible++;
+    });
+    archived.forEach(row=>{row.hidden=!!q && !normalize(row.dataset.search).includes(q)});
+    if(count) count.textContent=visible+' encontrado(s)';
+    if(noResults) noResults.hidden=visible!==0;
+    if(q && archivedPanel){
+      const archivedMatch=archived.some(row=>!row.hidden);
+      if(visible===0 && archivedMatch) archivedPanel.open=true;
+    }
+  }
+  if(search){search.addEventListener('input',applySearch);}
+  if(clear){clear.addEventListener('click',()=>{search.value='';search.focus();applySearch();});}
+
+  const dialog=document.getElementById('seller-edit-dialog');
+  const idInput=document.getElementById('edit-seller-id');
+  const nameInput=document.getElementById('edit-seller-name');
+  const phoneInput=document.getElementById('edit-seller-phone');
+  const title=document.getElementById('edit-seller-title');
+  document.querySelectorAll('[data-edit-seller]').forEach(btn=>btn.addEventListener('click',()=>{
+    idInput.value=btn.dataset.id||'';
+    nameInput.value=btn.dataset.name||'';
+    phoneInput.value=btn.dataset.phone||'';
+    title.textContent=btn.dataset.name||'Dados do vendedor';
+    if(dialog.showModal) dialog.showModal(); else dialog.setAttribute('open','');
+    setTimeout(()=>nameInput.focus(),50);
+  }));
+  document.querySelectorAll('[data-close-seller-dialog]').forEach(btn=>btn.addEventListener('click',()=>dialog.close ? dialog.close() : dialog.removeAttribute('open')));
+  if(dialog){dialog.addEventListener('click',(ev)=>{if(ev.target===dialog){dialog.close();}});}
+})();
+</script>
+{% endblock %}
