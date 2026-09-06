@@ -56,7 +56,7 @@ CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
-SYSTEM_BUILD = 'V11.3-HIBRIDO-RESET-NUVEM-2026-09-04'
+SYSTEM_BUILD = 'V11.6-PAGAMENTOS-REGISTRADOS-2026-09-05'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
@@ -104,6 +104,21 @@ def formatar_brasilia(valor, origem=''):
 @app.template_filter('brasilia')
 def filtro_brasilia(valor, origem=''):
     return formatar_brasilia(valor, origem)
+
+
+def normalizar_forma_pagamento(valor):
+    bruto = str(valor or '').strip().lower()
+    if bruto == 'pix':
+        return 'PIX'
+    if bruto == 'dinheiro':
+        return 'Dinheiro'
+    if bruto in {'outro', 'outros'}:
+        return 'Outros'
+    return 'Não informado'
+
+
+def _sql_forma_pagamento(campo):
+    return f"CASE WHEN LOWER(TRIM(COALESCE({campo},'')))='pix' THEN 'PIX' WHEN LOWER(TRIM(COALESCE({campo},'')))='dinheiro' THEN 'Dinheiro' WHEN LOWER(TRIM(COALESCE({campo},''))) IN ('outro','outros') THEN 'Outros' ELSE 'Não informado' END"
 
 
 def get_db():
@@ -245,7 +260,8 @@ def init_db():
         descricao TEXT NOT NULL,
         valor REAL NOT NULL,
         usuario_id INTEGER,
-        criado_em TEXT NOT NULL
+        criado_em TEXT NOT NULL,
+        forma_pagamento TEXT NOT NULL DEFAULT 'Dinheiro'
     );
 
     CREATE TABLE IF NOT EXISTS lotes (
@@ -357,6 +373,11 @@ def init_db():
     cols_acertos = {r['name'] for r in conn.execute("PRAGMA table_info(acertos)").fetchall()}
     if 'forma_pagamento' not in cols_acertos:
         conn.execute("ALTER TABLE acertos ADD COLUMN forma_pagamento TEXT")
+
+    cols_caixa_mov = {r['name'] for r in conn.execute("PRAGMA table_info(caixa_movimentos)").fetchall()}
+    if 'forma_pagamento' not in cols_caixa_mov:
+        conn.execute("ALTER TABLE caixa_movimentos ADD COLUMN forma_pagamento TEXT NOT NULL DEFAULT 'Dinheiro'")
+    conn.execute("UPDATE caixa_movimentos SET forma_pagamento='Dinheiro' WHERE forma_pagamento IS NULL OR TRIM(forma_pagamento)=''")
 
     conn.execute("INSERT OR IGNORE INTO sync_config (id,enabled,auto_interval,last_pull_seq,last_sync_ok) VALUES (1,0,60,0,0)")
 
@@ -1823,22 +1844,27 @@ def financeiro():
         vendedor_id=int(request.form['vendedor_id'])
         try: valor=float(request.form['valor'].replace(',','.'))
         except ValueError: valor=0
-        obs=request.form.get('observacao','').strip(); forma_pagamento=request.form.get('forma_pagamento','').strip()
+        obs=request.form.get('observacao','').strip(); forma_pagamento=normalizar_forma_pagamento(request.form.get('forma_pagamento',''))
         if valor>0:
             conn.execute("INSERT INTO acertos (evento_id,vendedor_id,valor,observacao,criado_em,forma_pagamento) VALUES (?,?,?,?,?,?)",
                          (evento['id'], vendedor_id, valor, obs, iso_brasilia(),forma_pagamento))
-            conn.commit(); flash('Recebimento registrado.', 'success')
+            conn.commit(); flash(f'Recebimento registrado em {forma_pagamento}.', 'success')
     vendedores=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall(); resumo=[]
     for v in vendedores:
         dist=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=?", (evento['id'],v['id'])).fetchone()['c']
         sold=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida'", (evento['id'],v['id'])).fetchone()['c']
-        received=conn.execute("SELECT COALESCE(SUM(valor),0) s FROM acertos WHERE evento_id=? AND vendedor_id=?", (evento['id'],v['id'])).fetchone()['s']
-        due=sold*float(evento['valor_cartela']); resumo.append({'id':v['id'],'nome':v['nome'],'distribuidas':dist,'vendidas':sold,'nao_vendidas':max(dist-sold,0),'devido':due,'recebido':received,'saldo':due-received})
+        formas=conn.execute("""SELECT """+_sql_forma_pagamento('forma_pagamento')+""" forma, COALESCE(SUM(valor),0) total
+            FROM acertos WHERE evento_id=? AND vendedor_id=? GROUP BY forma""", (evento['id'],v['id'])).fetchall()
+        por_forma={r['forma']:float(r['total'] or 0) for r in formas}
+        received=sum(por_forma.values())
+        due=sold*float(evento['valor_cartela']); resumo.append({'id':v['id'],'nome':v['nome'],'distribuidas':dist,'vendidas':sold,'nao_vendidas':max(dist-sold,0),'devido':due,'recebido':received,'saldo':due-received,'dinheiro':por_forma.get('Dinheiro',0),'pix':por_forma.get('PIX',0),'outros':por_forma.get('Outros',0),'nao_informado':por_forma.get('Não informado',0)})
     historico=conn.execute("""SELECT a.*,v.nome vendedor FROM acertos a JOIN vendedores v ON v.id=a.vendedor_id
-        WHERE a.evento_id=? ORDER BY a.id DESC LIMIT 30""", (evento['id'],)).fetchall()
+        WHERE a.evento_id=? ORDER BY a.id DESC LIMIT 60""", (evento['id'],)).fetchall()
     total_devido=sum(x['devido'] for x in resumo); total_recebido=sum(x['recebido'] for x in resumo)
-    conn.close(); return render_template('financeiro.html', evento=evento, resumo=resumo, historico=historico, total_devido=total_devido, total_recebido=total_recebido)
-
+    totais_forma={'Dinheiro':0.0,'PIX':0.0,'Outros':0.0,'Não informado':0.0}
+    for x in resumo:
+        totais_forma['Dinheiro'] += x['dinheiro']; totais_forma['PIX'] += x['pix']; totais_forma['Outros'] += x['outros']; totais_forma['Não informado'] += x['nao_informado']
+    conn.close(); return render_template('financeiro.html', evento=evento, resumo=resumo, historico=historico, total_devido=total_devido, total_recebido=total_recebido, totais_forma=totais_forma)
 
 
 @app.route('/rodadas', methods=['GET','POST'])
@@ -2147,8 +2173,12 @@ def coletar_relatorio(conn, evento):
     inutilizadas = conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND status='inutilizada'", (eid,)).fetchone()['c']
     impressas = conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND impressa_em IS NOT NULL", (eid,)).fetchone()['c']
     lotes = conn.execute("SELECT COUNT(*) c FROM lotes WHERE evento_id=?", (eid,)).fetchone()['c']
-    pagamentos = conn.execute("""SELECT COALESCE(NULLIF(pagamento,''),'Não informado') forma, COUNT(*) qtd
-        FROM cartelas WHERE evento_id=? AND status='vendida' GROUP BY COALESCE(NULLIF(pagamento,''),'Não informado') ORDER BY qtd DESC""", (eid,)).fetchall()
+    pagamentos_rows = conn.execute("SELECT "+_sql_forma_pagamento('pagamento')+" forma, COUNT(*) qtd FROM cartelas WHERE evento_id=? AND status='vendida' GROUP BY forma ORDER BY qtd DESC", (eid,)).fetchall()
+    pagamentos = [{'forma':r['forma'],'qtd':r['qtd'],'valor':float(r['qtd'] or 0)*valor_cartela} for r in pagamentos_rows]
+    acertos_forma_rows = conn.execute("SELECT "+_sql_forma_pagamento('forma_pagamento')+" forma, COALESCE(SUM(valor),0) valor, COUNT(*) qtd FROM acertos WHERE evento_id=? GROUP BY forma ORDER BY valor DESC", (eid,)).fetchall()
+    acertos_forma = [{'forma':r['forma'],'valor':float(r['valor'] or 0),'qtd':int(r['qtd'] or 0)} for r in acertos_forma_rows]
+    caixa_forma_rows = conn.execute("SELECT "+_sql_forma_pagamento('forma_pagamento')+" forma, COALESCE(SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END),0) entradas, COALESCE(SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END),0) saidas FROM caixa_movimentos WHERE evento_id=? GROUP BY forma ORDER BY forma", (eid,)).fetchall()
+    caixa_formas = [{'forma':r['forma'],'entradas':float(r['entradas'] or 0),'saidas':float(r['saidas'] or 0)} for r in caixa_forma_rows]
     vendedores = conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall()
     por_vendedor=[]
     total_recebido=0
@@ -2176,7 +2206,7 @@ def coletar_relatorio(conn, evento):
     return {
         'total':total,'vendidas':vendidas,'nao_vendidas':max(total-vendidas-inutilizadas,0),'distribuidas':distribuidas,'inutilizadas':inutilizadas,'impressas':impressas,'lotes':lotes,
         'arrecadacao':arrecadacao,'total_recebido':total_recebido,'saldo_receber':arrecadacao-total_recebido,
-        'pagamentos':pagamentos,'vendedores':por_vendedor,'rodadas':rodadas,'ganhadores':ganhadores,
+        'pagamentos':pagamentos,'acertos_forma':acertos_forma,'caixa_formas':caixa_formas,'vendedores':por_vendedor,'rodadas':rodadas,'ganhadores':ganhadores,
         'premios':premios,'resultado_estimado':arrecadacao-premios,'estornos':estornos,
         'caixa_fechamentos':caixa_resumo['qtd'],'caixa_diferenca':float(caixa_resumo['diferenca'] or 0),'ultimo_caixa':ultimo_caixa
     }
@@ -2206,7 +2236,7 @@ def _comprovante_venda_pdf(evento, mov, vendedor=None, usuario=None, cancelada=F
     dados=[
         ('Comprador', mov['comprador'] or 'Não informado'),
         ('Telefone', mov['telefone'] or 'Não informado'),
-        ('Pagamento', mov['pagamento'] or 'Não informado'),
+        ('Pagamento', normalizar_forma_pagamento(mov['pagamento'])),
         ('Vendedor', vendedor['nome'] if vendedor else 'Venda direta / não informado'),
         ('Registrado por', usuario['nome'] if usuario else ('Acesso pelo celular' if (mov['origem'] or '')=='celular' else 'Sistema local')),
         ('Data e hora', formatar_brasilia(mov['criado_em'], mov['origem'] or '')),
@@ -2228,7 +2258,7 @@ def _comprovante_acerto_pdf(evento, acerto, vendedor):
     x=22*mm; y=ph-28*mm
     pdf.setFillColor(PRIMARY); pdf.setFont('Helvetica-Bold',22); pdf.drawString(x,y,'Recibo de acerto'); y-=10*mm
     pdf.setFillColor(TEXT); pdf.setFont('Helvetica-Bold',13); pdf.drawString(x,y,evento['nome'][:70]); y-=15*mm
-    itens=[('Vendedor / equipe',vendedor['nome']),('Valor recebido',_pdf_money(acerto['valor'])),('Forma de pagamento',acerto['forma_pagamento'] or 'Não informada'),('Data e hora',formatar_brasilia(acerto['criado_em'])),('Observação',acerto['observacao'] or '—'),('Referência',f"B{evento['id']}-A{acerto['id']:06d}")]
+    itens=[('Vendedor / equipe',vendedor['nome']),('Valor recebido',_pdf_money(acerto['valor'])),('Forma de pagamento',normalizar_forma_pagamento(acerto['forma_pagamento'])),('Data e hora',formatar_brasilia(acerto['criado_em'])),('Observação',acerto['observacao'] or '—'),('Referência',f"B{evento['id']}-A{acerto['id']:06d}")]
     for label,value in itens:
         pdf.setFillColor(MUTED); pdf.setFont('Helvetica-Bold',8); pdf.drawString(x,y,label.upper());
         pdf.setFillColor(TEXT); pdf.setFont('Helvetica',11); pdf.drawString(x,y-5*mm,str(value)[:90]); y-=15*mm
@@ -2425,8 +2455,7 @@ def coletar_estatisticas(conn,evento):
     loteadas=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND lote_id IS NOT NULL",(eid,)).fetchone()['c']
     distribuidas=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id IS NOT NULL",(eid,)).fetchone()['c']
     inutilizadas=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND status='inutilizada'",(eid,)).fetchone()['c']
-    pagamentos=[dict(r) for r in conn.execute("""SELECT COALESCE(NULLIF(pagamento,''),'Não informado') nome,COUNT(*) qtd
-        FROM cartelas WHERE evento_id=? AND status='vendida' GROUP BY COALESCE(NULLIF(pagamento,''),'Não informado') ORDER BY qtd DESC""",(eid,)).fetchall()]
+    pagamentos=[dict(r) for r in conn.execute("SELECT "+_sql_forma_pagamento('pagamento')+" nome,COUNT(*) qtd FROM cartelas WHERE evento_id=? AND status='vendida' GROUP BY nome ORDER BY qtd DESC",(eid,)).fetchall()]
     max_pay=max([x['qtd'] for x in pagamentos],default=1)
     for x in pagamentos: x['pct']=x['qtd']/max_pay*100; x['valor']=x['qtd']*valor
     vendedores=[dict(r) for r in conn.execute("""SELECT v.nome,COUNT(*) qtd FROM cartelas c JOIN vendedores v ON v.id=c.vendedor_id
@@ -2622,6 +2651,22 @@ def relatorio_pdf():
     pdf.setFillColor(MUTED); pdf.setFont('Helvetica',8.5); pdf.drawString(18*mm,y,f"Data: {evento['data'] or 'não informada'}  |  Situação: {status_evento_label(evento['status'])}"); y-=11*mm
     title('Resumo financeiro',13)
     line('Cartelas geradas',dados['total']); line('Cartelas impressas',dados['impressas']); line('Lotes físicos',dados['lotes']); line('Cartelas vendidas',dados['vendidas']); line('Cartelas inutilizadas',dados['inutilizadas']); line('Arrecadação bruta',_pdf_money(dados['arrecadacao']),True); line('Recebido nos acertos',_pdf_money(dados['total_recebido'])); line('Saldo a receber',_pdf_money(dados['saldo_receber'])); line('Prêmios configurados/realizados',_pdf_money(dados['premios'])); line('Resultado estimado',_pdf_money(dados['resultado_estimado']),True); line('Estornos registrados na V5',dados['estornos']); line('Fechamentos de caixa',dados['caixa_fechamentos']); line('Diferença acumulada de caixa',_pdf_money(dados['caixa_diferenca']))
+    y-=4*mm; title('Vendas por forma de pagamento',13)
+    if dados['pagamentos']:
+        for p in dados['pagamentos']:
+            line(f"{p['forma']} — {p['qtd']} cartela(s)", _pdf_money(p['valor']))
+    else:
+        line('Formas de pagamento','Nenhuma venda registrada')
+    y-=4*mm; title('Recebimentos dos vendedores por forma',13)
+    if dados['acertos_forma']:
+        for p in dados['acertos_forma']:
+            line(f"{p['forma']} — {p['qtd']} lançamento(s)", _pdf_money(p['valor']))
+    else:
+        line('Acertos financeiros','Nenhum recebimento registrado')
+    if dados['caixa_formas']:
+        y-=4*mm; title('Movimentos manuais do caixa por forma',13)
+        for p in dados['caixa_formas']:
+            line(p['forma'], f"Entradas {_pdf_money(p['entradas'])} | Saídas {_pdf_money(p['saidas'])}")
     y-=4*mm; title('Prestação de contas por vendedor',13)
     for v in dados['vendedores']:
         line(f"{v['nome']} — {v['vendidas']} vendidas", f"Devido {_pdf_money(v['devido'])} | Saldo {_pdf_money(v['saldo'])}")
@@ -2847,13 +2892,38 @@ def _caixa_valor_sistema(conn, caixa, evento):
         AND pagamento='Dinheiro' AND vendedor_id IS NULL AND vendido_em IS NOT NULL AND vendido_em BETWEEN ? AND ?""", (evento['id'],inicio,fim)).fetchone()['c']
     venda_valor=vendas*float(evento['valor_cartela'])
     acertos_cash=conn.execute("""SELECT COALESCE(SUM(valor),0) s FROM acertos WHERE evento_id=?
-        AND forma_pagamento='Dinheiro' AND criado_em BETWEEN ? AND ?""", (evento['id'],inicio,fim)).fetchone()['s']
+        AND LOWER(TRIM(COALESCE(forma_pagamento,'')))='dinheiro' AND criado_em BETWEEN ? AND ?""", (evento['id'],inicio,fim)).fetchone()['s']
     movimentos=conn.execute("""SELECT
-        COALESCE(SUM(CASE WHEN tipo='entrada' THEN valor ELSE 0 END),0) entradas,
-        COALESCE(SUM(CASE WHEN tipo='saida' THEN valor ELSE 0 END),0) saidas
+        COALESCE(SUM(CASE WHEN tipo='entrada' AND LOWER(TRIM(COALESCE(forma_pagamento,'Dinheiro')))='dinheiro' THEN valor ELSE 0 END),0) entradas,
+        COALESCE(SUM(CASE WHEN tipo='saida' AND LOWER(TRIM(COALESCE(forma_pagamento,'Dinheiro')))='dinheiro' THEN valor ELSE 0 END),0) saidas
         FROM caixa_movimentos WHERE caixa_id=?""", (caixa['id'],)).fetchone()
     esperado=float(caixa['valor_inicial'])+venda_valor+float(acertos_cash)+float(movimentos['entradas'])-float(movimentos['saidas'])
     return esperado, vendas, float(acertos_cash), float(movimentos['entradas']), float(movimentos['saidas'])
+
+
+def _registros_nao_fisicos_caixa(conn, caixa, evento):
+    inicio=caixa['aberto_em']; fim=caixa['fechado_em'] if caixa['fechado_em'] else '9999-12-31T23:59:59'
+    valor_cartela=float(evento['valor_cartela'])
+    registros=[]
+    vendas=conn.execute("""SELECT numero,pagamento,vendido_em FROM cartelas WHERE evento_id=? AND status='vendida'
+        AND vendedor_id IS NULL AND vendido_em IS NOT NULL AND vendido_em BETWEEN ? AND ?
+        AND LOWER(TRIM(COALESCE(pagamento,''))) IN ('pix','outro','outros') ORDER BY vendido_em""",(evento['id'],inicio,fim)).fetchall()
+    for r in vendas:
+        registros.append({'criado_em':r['vendido_em'],'forma':normalizar_forma_pagamento(r['pagamento']),'tipo':'entrada','descricao':f'Venda direta cartela {int(r["numero"]):04d}','valor':valor_cartela,'origem':'Venda'})
+    acertos=conn.execute("""SELECT a.criado_em,a.forma_pagamento,a.valor,v.nome vendedor FROM acertos a LEFT JOIN vendedores v ON v.id=a.vendedor_id
+        WHERE a.evento_id=? AND a.criado_em BETWEEN ? AND ? AND LOWER(TRIM(COALESCE(a.forma_pagamento,''))) IN ('pix','outro','outros') ORDER BY a.criado_em""",(evento['id'],inicio,fim)).fetchall()
+    for r in acertos:
+        registros.append({'criado_em':r['criado_em'],'forma':normalizar_forma_pagamento(r['forma_pagamento']),'tipo':'entrada','descricao':f'Acerto de {r["vendedor"] or "vendedor"}','valor':float(r['valor'] or 0),'origem':'Acerto'})
+    manuais=conn.execute("""SELECT criado_em,forma_pagamento,tipo,descricao,valor FROM caixa_movimentos WHERE caixa_id=?
+        AND LOWER(TRIM(COALESCE(forma_pagamento,''))) IN ('pix','outro','outros') ORDER BY criado_em""",(caixa['id'],)).fetchall()
+    for r in manuais:
+        registros.append({'criado_em':r['criado_em'],'forma':normalizar_forma_pagamento(r['forma_pagamento']),'tipo':r['tipo'],'descricao':r['descricao'],'valor':float(r['valor'] or 0),'origem':'Manual'})
+    registros.sort(key=lambda x:str(x.get('criado_em') or ''), reverse=True)
+    totais={'PIX':{'entradas':0.0,'saidas':0.0},'Outros':{'entradas':0.0,'saidas':0.0}}
+    for r in registros:
+        if r['forma'] in totais:
+            totais[r['forma']]['entradas' if r['tipo']=='entrada' else 'saidas'] += r['valor']
+    return registros, totais
 
 
 @app.route('/caixa', methods=['GET','POST'])
@@ -2868,14 +2938,14 @@ def caixa():
             conn.execute("INSERT INTO caixas (evento_id,aberto_por,aberto_em,valor_inicial,status) VALUES (?,?,?,?, 'aberto')", (eid,usuario_atual_id(),iso_brasilia(),max(inicial,0)))
             conn.commit(); flash('Caixa aberto.', 'success')
         elif acao=='movimento' and aberto:
-            tipo=request.form.get('tipo','entrada'); descricao=request.form.get('descricao','').strip()
+            tipo=request.form.get('tipo','entrada'); descricao=request.form.get('descricao','').strip(); forma=normalizar_forma_pagamento(request.form.get('forma_pagamento','Dinheiro'))
             try: valor=float(request.form.get('valor','0').replace(',','.'))
             except ValueError: valor=0
             if tipo not in {'entrada','saida'} or valor<=0 or not descricao:
                 flash('Informe tipo, descrição e um valor válido.', 'warning')
             else:
-                conn.execute("INSERT INTO caixa_movimentos (caixa_id,evento_id,tipo,descricao,valor,usuario_id,criado_em) VALUES (?,?,?,?,?,?,?)", (aberto['id'],eid,tipo,descricao,valor,usuario_atual_id(),iso_brasilia()))
-                conn.commit(); flash('Movimento registrado no caixa.', 'success')
+                conn.execute("INSERT INTO caixa_movimentos (caixa_id,evento_id,tipo,descricao,valor,usuario_id,criado_em,forma_pagamento) VALUES (?,?,?,?,?,?,?,?)", (aberto['id'],eid,tipo,descricao,valor,usuario_atual_id(),iso_brasilia(),forma))
+                conn.commit(); flash(f'Movimento registrado em {forma}.', 'success')
         elif acao=='fechar' and aberto:
             try: contado=float(request.form.get('valor_informado','0').replace(',','.'))
             except ValueError: contado=0
@@ -2885,14 +2955,15 @@ def caixa():
         return redirect(url_for('caixa'))
     aberto=conn.execute("SELECT * FROM caixas WHERE evento_id=? AND status='aberto' ORDER BY id DESC LIMIT 1", (eid,)).fetchone()
     esperado=vendas_dinheiro=acertos_dinheiro=entradas=saidas=0
-    movimentos=[]
+    movimentos=[]; registros_nao_fisicos=[]; totais_nao_fisicos={'PIX':{'entradas':0.0,'saidas':0.0},'Outros':{'entradas':0.0,'saidas':0.0}}
     if aberto:
         esperado,vendas_dinheiro,acertos_dinheiro,entradas,saidas=_caixa_valor_sistema(conn,aberto,evento)
         movimentos=conn.execute("SELECT * FROM caixa_movimentos WHERE caixa_id=? ORDER BY id DESC", (aberto['id'],)).fetchall()
+        registros_nao_fisicos,totais_nao_fisicos=_registros_nao_fisicos_caixa(conn,aberto,evento)
     historico=conn.execute("""SELECT c.*,ua.nome aberto_nome,uf.nome fechado_nome FROM caixas c
         LEFT JOIN usuarios ua ON ua.id=c.aberto_por LEFT JOIN usuarios uf ON uf.id=c.fechado_por
         WHERE c.evento_id=? AND c.status='fechado' ORDER BY c.id DESC LIMIT 15""", (eid,)).fetchall()
-    conn.close(); return render_template('caixa.html',evento=evento,aberto=aberto,esperado=esperado,vendas_dinheiro=vendas_dinheiro,acertos_dinheiro=acertos_dinheiro,entradas=entradas,saidas=saidas,movimentos=movimentos,historico=historico)
+    conn.close(); return render_template('caixa.html',evento=evento,aberto=aberto,esperado=esperado,vendas_dinheiro=vendas_dinheiro,acertos_dinheiro=acertos_dinheiro,entradas=entradas,saidas=saidas,movimentos=movimentos,historico=historico,registros_nao_fisicos=registros_nao_fisicos,totais_nao_fisicos=totais_nao_fisicos)
 
 
 @app.route('/auditoria')
