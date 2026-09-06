@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="pt-br">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telão • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telão • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"><link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}"></head>
 <body class="screen-body-v7">
   <div id="fullscreenGate" class="v7-fullscreen-gate">
-    <div class="v7-fullscreen-card"><div class="brand-mark">B</div><span>TELÃO DO BINGO</span><h1>{{ evento.nome }}</h1><p>As informações do bingo serão exibidas somente em tela cheia para evitar cortes.</p><button id="fullscreenBtn" class="v7-fullscreen-btn">⛶ Abrir telão em tela cheia</button><small id="fullscreenHint">Clique uma vez para iniciar.</small></div>
+    <div class="v7-fullscreen-card"><div class="brand-mark"><img src="{{ url_for('static', filename='logo_sistema_bc.png') }}" alt="Logo do sistema"></div><span>TELÃO DO BINGO</span><h1>{{ evento.nome }}</h1><p>As informações do bingo serão exibidas somente em tela cheia para evitar cortes.</p><button id="fullscreenBtn" class="v7-fullscreen-btn">⛶ Abrir telão em tela cheia</button><small id="fullscreenHint">Clique uma vez para iniciar.</small></div>
   </div>
 
   <main id="telaoMain" class="screen-v7">

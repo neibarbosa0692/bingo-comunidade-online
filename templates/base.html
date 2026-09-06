@@ -4,11 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Bingo Comunidade{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 </head>
 <body>
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-mark">B</div><div><strong>Bingo</strong><span>Comunidade</span></div></div>
+    <div class="brand"><div class="brand-mark"><img src="{{ url_for('static', filename='logo_sistema_bc.png') }}" alt="Logo do sistema"></div><div><strong>Bingo</strong><span>Comunidade</span></div></div>
     <nav>
       {% if pode('dashboard') %}<a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}">⌂ <span>Visão geral</span></a>{% endif %}
       {% if pode('eventos') %}<a href="{{ url_for('eventos') }}" class="{% if request.endpoint in ['eventos','evento_ativar','evento_editar','evento_excluir'] %}active{% endif %}">◉ <span>Meus bingos</span></a>{% endif %}
