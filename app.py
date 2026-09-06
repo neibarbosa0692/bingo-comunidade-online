@@ -1936,11 +1936,20 @@ def mobile_home():
     vendedor=None
     if session.get('vendedor_id'):
         vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1", (session['vendedor_id'],)).fetchone()
-    vendidas=0; minhas=[]
+    vendidas=0; total_cartelas=0; restantes=0; minhas=[]
     if vendedor:
-        vendidas=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida'", (evento['id'],vendedor['id'])).fetchone()['c']
+        resumo=conn.execute("""SELECT
+            COUNT(*) total,
+            SUM(CASE WHEN status='vendida' THEN 1 ELSE 0 END) vendidas,
+            SUM(CASE WHEN status='disponivel' THEN 1 ELSE 0 END) restantes
+            FROM cartelas
+            WHERE evento_id=? AND vendedor_id=? AND status<>'inutilizada'""",
+            (evento['id'],vendedor['id'])).fetchone()
+        total_cartelas=resumo['total'] or 0
+        vendidas=resumo['vendidas'] or 0
+        restantes=resumo['restantes'] or 0
         minhas=conn.execute("SELECT numero,status,comprador FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status<>'inutilizada' ORDER BY numero LIMIT 500",(evento['id'],vendedor['id'])).fetchall()
-    conn.close(); return render_template('mobile_home.html', evento=evento, vendedores=vendedores, vendedor=vendedor, vendidas=vendidas, minhas=minhas, mode=BINGO_MODE, vendas_fechadas=vendas_fechadas(evento))
+    conn.close(); return render_template('mobile_home.html', evento=evento, vendedores=vendedores, vendedor=vendedor, vendidas=vendidas, total_cartelas=total_cartelas, restantes=restantes, minhas=minhas, mode=BINGO_MODE, vendas_fechadas=vendas_fechadas(evento))
 
 
 @app.route('/mobile/vendedor/<int:vendedor_id>')
