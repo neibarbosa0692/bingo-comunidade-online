@@ -29,7 +29,7 @@
 
   <aside class="draw-side">
     <div class="panel winner-panel"><span class="eyebrow">CONFERÊNCIA</span><h3>Verificar cartela</h3><form action="{{ url_for('conferir') }}" method="post" class="inline-form"><input type="number" name="numero" placeholder="Nº da cartela" required><button class="btn btn-primary">Conferir</button></form><p class="muted">Também é possível escanear o QR da cartela pelo celular.</p></div>
-    <div class="panel v7-bingo-detected"><span class="eyebrow">BINGOS DETECTADOS</span><h3>Cartelas que completaram a rodada</h3><div class="winner-list">{% for p in possiveis[:16] %}<div class="winner-item {% if p.confirmado %}confirmed{% endif %}"><strong>{{ '%04d'|format(p.numero) }}</strong><span>{{ p.padrao }}</span><small>{% if p.lote %}Lote {{ p.lote }} • {% endif %}{{ p.comprador or 'Comprador não informado' }}{% if p.vendedor %} • {{ p.vendedor }}{% endif %}</small>{% if not p.confirmado %}<form action="{{ url_for('confirmar_ganhador', numero=p.numero) }}" method="post"><button class="btn btn-small btn-primary">Confirmar ganhador</button></form>{% else %}<em>✓ Confirmado</em>{% endif %}</div>{% else %}<p class="muted">Nenhuma cartela completou o padrão da rodada.</p>{% endfor %}</div></div>
+    <div class="panel v7-bingo-detected {% if pendentes_conferencia %}attention{% endif %}"><span class="eyebrow">BINGOS DETECTADOS</span><h3>Cartelas que completaram a rodada</h3>{% if pendentes_conferencia %}<div class="v9-detected-summary"><b>{{ pendentes_conferencia|length }}</b><span>aguardando conferência</span></div><p class="muted">O sorteio está pausado até a conferência.</p>{% elif possiveis %}<div class="winner-list compact">{% for p in possiveis[:8] %}<div class="winner-item confirmed"><strong>{{ '%04d'|format(p.numero) }}</strong><small>{{ p.comprador or 'Comprador não informado' }}</small><em>✓ Confirmado</em></div>{% endfor %}</div>{% else %}<p class="muted">Nenhuma cartela completou o padrão da rodada.</p>{% endif %}</div>
     {% if ganhadores %}<div class="panel"><span class="eyebrow">GANHADORES CONFIRMADOS</span><div class="winner-list compact">{% for g in ganhadores %}<div class="winner-item confirmed"><strong>{{ '%04d'|format(g.numero) }}</strong><small>{% if g.lote %}Lote {{ g.lote }} • {% endif %}{{ g.comprador or 'Comprador não informado' }}{% if g.vendedor %} • {{ g.vendedor }}{% endif %}</small></div>{% endfor %}</div></div>{% endif %}
     <form action="{{ url_for('reiniciar_sorteio') }}" method="post" onsubmit="return confirm('Reiniciar todos os números sorteados?')"><button class="btn btn-danger btn-full">Reiniciar sorteio</button></form>
   </aside>
@@ -49,5 +49,36 @@
     </div>
     {% endfor %}
   </div>
+
 </div>
+
+{% if pendentes_conferencia %}
+<div class="v9-bingo-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="v9BingoAlertTitle">
+  <section class="v9-bingo-modal">
+    <div class="v9-bingo-alert-head">
+      <div class="v9-alert-icon">!</div>
+      <div><span>POSSÍVEL GANHADOR DETECTADO</span><h2 id="v9BingoAlertTitle">Sorteio pausado para conferência</h2><p>Não é possível chamar outro número enquanto existir cartela aguardando conferência.</p></div>
+    </div>
+    <div class="v9-bingo-pending-list">
+      {% for p in pendentes_conferencia %}
+      <article class="v9-bingo-candidate">
+        <div class="v9-candidate-info">
+          <div class="v9-candidate-number"><span>CARTELA</span><strong>{{ '%04d'|format(p.numero) }}</strong></div>
+          <div class="v9-candidate-meta"><b>{{ p.padrao }}</b><span>{{ p.comprador or 'Comprador não informado' }}</span><small>{% if p.lote %}Lote {{ p.lote }}{% endif %}{% if p.vendedor %}{% if p.lote %} • {% endif %}Vendedor: {{ p.vendedor }}{% endif %}{% if p.telefone %} • {{ p.telefone }}{% endif %}</small></div>
+        </div>
+        <div class="v9-mini-bingo" aria-label="Cartela {{ '%04d'|format(p.numero) }}">
+          <div class="v9-mini-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div>
+          {% for row in p.grade %}<div class="v9-mini-row">{% for n in row %}<span class="{% if n==0 or n in sorteados %}hit{% endif %} {% if n==0 %}free{% endif %}">{{ '★' if n==0 else n }}</span>{% endfor %}</div>{% endfor %}
+        </div>
+        <div class="v9-candidate-actions">
+          <p>Confira a cartela física/QR. Se os dados estiverem corretos, confirme o ganhador para liberar o sorteio.</p>
+          <form action="{{ url_for('confirmar_ganhador', numero=p.numero) }}" method="post"><button class="btn btn-primary btn-xl btn-full">✓ Confirmar ganhador {{ '%04d'|format(p.numero) }}</button></form>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    <div class="v9-modal-lock-note">🔒 O pop-up não pode ser fechado enquanto houver uma possível cartela vencedora sem conferência.</div>
+  </section>
+</div>
+{% endif %}
 {% endblock %}
