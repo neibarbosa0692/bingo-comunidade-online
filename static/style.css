@@ -79,3 +79,13 @@ textarea{width:100%;margin-top:7px;padding:12px 13px;border:1px solid #dfe3ec;bo
 .mobile-card-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mobile-card-item{display:flex;flex-direction:column;padding:11px;border-radius:12px;text-decoration:none;border:1px solid #dde3ec;background:#fff;color:#172033}.mobile-card-item b{font-size:17px}.mobile-card-item span{font-size:12px;font-weight:800}.mobile-card-item.disponivel span{color:#12875d}.mobile-card-item.vendida{background:#f4f5f8}.mobile-card-item.vendida span{color:#8b4450}.mobile-card-item small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6f7890}
 .access-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.12em;font-size:1.05em}
 @media(max-width:900px){.hybrid-hero{grid-template-columns:1fr}.mobile-card-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* V11.7 - resumo compacto do vendedor */
+.mobile-welcome.seller-summary{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px}
+.seller-identity{min-width:0;flex:1}.seller-identity h2{margin:7px 0 14px}.seller-identity a{display:inline-block}
+.seller-balance{display:grid;grid-template-columns:repeat(3,minmax(68px,1fr));gap:8px;flex:0 0 auto}
+.seller-balance-item{min-width:68px;padding:10px 9px;border-radius:14px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.18);text-align:center;backdrop-filter:blur(2px)}
+.seller-balance-item small{display:block;color:#ddd8ff;font-size:8px;letter-spacing:.65px;text-transform:uppercase;font-weight:900;margin-bottom:4px}
+.seller-balance-item strong{display:block;color:#fff;font-size:21px;line-height:1}
+@media(max-width:520px){.mobile-welcome.seller-summary{align-items:stretch;gap:14px;padding:18px}.seller-balance{grid-template-columns:repeat(3,1fr);width:100%}.seller-balance-item{min-width:0;padding:9px 5px}.seller-balance-item strong{font-size:19px}}
+@media(max-width:410px){.mobile-welcome.seller-summary{flex-direction:column}.seller-balance-item small{font-size:7px}}
