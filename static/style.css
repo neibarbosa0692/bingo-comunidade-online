@@ -89,3 +89,12 @@ textarea{width:100%;margin-top:7px;padding:12px 13px;border:1px solid #dfe3ec;bo
 .seller-balance-item strong{display:block;color:#fff;font-size:21px;line-height:1}
 @media(max-width:520px){.mobile-welcome.seller-summary{align-items:stretch;gap:14px;padding:18px}.seller-balance{grid-template-columns:repeat(3,1fr);width:100%}.seller-balance-item{min-width:0;padding:9px 5px}.seller-balance-item strong{font-size:19px}}
 @media(max-width:410px){.mobile-welcome.seller-summary{flex-direction:column}.seller-balance-item small{font-size:7px}}
+
+
+/* V11.8 • logo oficial do sistema */
+.brand-mark,.login-logo-v5,.mobile-top .mobile-brand{overflow:hidden}
+.brand-mark img,.login-logo-v5 img,.mobile-top .mobile-brand img{width:100%;height:100%;object-fit:contain;display:block}
+.brand-mark{background:rgba(255,255,255,.08);padding:4px}
+.login-logo-v5{background:rgba(255,255,255,.08);padding:6px}
+.mobile-top .mobile-brand{background:#fff;padding:4px;box-shadow:0 8px 24px rgba(91,70,232,.18)}
+.v7-fullscreen-card .brand-mark img{width:100%;height:100%;object-fit:contain;display:block}
