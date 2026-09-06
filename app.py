@@ -56,7 +56,7 @@ CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
-SYSTEM_BUILD = 'V11.6-PAGAMENTOS-REGISTRADOS-2026-09-05'
+SYSTEM_BUILD = 'V11.9-ALERTA-BINGO-POPUP-2026-09-06'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
@@ -861,6 +861,37 @@ def cartela_proximidade_padrao(grade, sorteados, padrao):
 
     melhor = min(candidatos, key=lambda itens: (len(itens), itens)) if candidatos else []
     return len(melhor), melhor
+
+
+def detectar_possiveis_ganhadores(conn, evento_id, sorteados, rodada):
+    """Retorna cartelas vendidas que já completaram o padrão da rodada ativa.
+
+    O campo ``confirmado`` diferencia as que ainda precisam de conferência do operador.
+    A grade é enviada à tela do sorteio para permitir uma conferência visual no pop-up.
+    """
+    if not rodada:
+        return []
+    cards = conn.execute("""SELECT c.*,v.nome vendedor,l.codigo lote FROM cartelas c
+        LEFT JOIN vendedores v ON v.id=c.vendedor_id
+        LEFT JOIN lotes l ON l.id=c.lote_id
+        WHERE c.evento_id=? AND c.status='vendida' ORDER BY c.numero""", (evento_id,)).fetchall()
+    possiveis = []
+    for card in cards:
+        if not cartela_status_rodada(card, sorteados, rodada):
+            continue
+        ja = conn.execute("SELECT COUNT(*) c FROM ganhadores WHERE rodada_id=? AND cartela_id=? AND confirmado=1",
+                          (rodada['id'], card['id'])).fetchone()['c']
+        possiveis.append({
+            'numero': card['numero'],
+            'padrao': padrao_label(rodada['padrao']),
+            'comprador': card['comprador'],
+            'telefone': card['telefone'],
+            'vendedor': card['vendedor'],
+            'lote': card['lote'],
+            'confirmado': bool(ja),
+            'grade': json.loads(card['numeros']),
+        })
+    return possiveis
 
 
 def detectar_proximas_cartelas(conn, evento_id, sorteados, rodada, limite_por_grupo=None):
@@ -2063,34 +2094,36 @@ def sorteio_evento_acao(evento_id):
 def sorteio():
     conn=get_db(); evento=evento_ativo(conn)
     if request.method=='POST':
-        acao=request.form.get('acao'); existentes=[r['numero'] for r in conn.execute("SELECT numero FROM sorteios WHERE evento_id=? ORDER BY ordem", (evento['id'],)).fetchall()]
-        if acao=='sortear':
-            restantes=[n for n in range(1,76) if n not in existentes]; numero=random.choice(restantes) if restantes else None
+        acao=request.form.get('acao')
+        existentes=[r['numero'] for r in conn.execute("SELECT numero FROM sorteios WHERE evento_id=? ORDER BY ordem", (evento['id'],)).fetchall()]
+        rodada_atual=rodada_ativa(conn,evento['id'])
+        pendentes_antes=[p for p in detectar_possiveis_ganhadores(conn,evento['id'],existentes,rodada_atual) if not p['confirmado']]
+        # Trava de segurança: mesmo que o pop-up seja contornado no navegador,
+        # nenhum novo número pode ser registrado enquanto houver possível ganhador sem conferência.
+        if pendentes_antes:
+            nums=', '.join(f"{p['numero']:04d}" for p in pendentes_antes[:8])
+            flash(f'Sorteio pausado: confira primeiro a(s) cartela(s) {nums}.', 'danger')
         else:
-            try: numero=int(request.form.get('numero',0))
-            except ValueError: numero=0
-        if numero and 1<=numero<=75:
-            if numero in existentes: flash(f'O número {numero} já foi sorteado.', 'warning')
+            if acao=='sortear':
+                restantes=[n for n in range(1,76) if n not in existentes]; numero=random.choice(restantes) if restantes else None
             else:
-                conn.execute("INSERT INTO sorteios (evento_id,numero,ordem) VALUES (?,?,?)", (evento['id'],numero,len(existentes)+1)); conn.commit(); flash(f'Número {numero} registrado.', 'success')
+                try: numero=int(request.form.get('numero',0))
+                except ValueError: numero=0
+            if numero and 1<=numero<=75:
+                if numero in existentes: flash(f'O número {numero} já foi sorteado.', 'warning')
+                else:
+                    conn.execute("INSERT INTO sorteios (evento_id,numero,ordem) VALUES (?,?,?)", (evento['id'],numero,len(existentes)+1)); conn.commit(); flash(f'Número {numero} registrado.', 'success')
     sorteados=[r['numero'] for r in conn.execute("SELECT numero FROM sorteios WHERE evento_id=? ORDER BY ordem", (evento['id'],)).fetchall()]
-    rodada=rodada_ativa(conn,evento['id']); possiveis=[]
-    vendidas=conn.execute("""SELECT c.*,v.nome vendedor,l.codigo lote FROM cartelas c
-        LEFT JOIN vendedores v ON v.id=c.vendedor_id
-        LEFT JOIN lotes l ON l.id=c.lote_id
-        WHERE c.evento_id=? AND c.status='vendida' ORDER BY c.numero""", (evento['id'],)).fetchall()
-    if rodada:
-        for card in vendidas:
-            if cartela_status_rodada(card,sorteados,rodada):
-                ja=conn.execute("SELECT COUNT(*) c FROM ganhadores WHERE rodada_id=? AND cartela_id=? AND confirmado=1", (rodada['id'],card['id'])).fetchone()['c']
-                possiveis.append({'numero':card['numero'],'padrao':padrao_label(rodada['padrao']),'comprador':card['comprador'],'telefone':card['telefone'],'vendedor':card['vendedor'],'lote':card['lote'],'confirmado':bool(ja)})
+    rodada=rodada_ativa(conn,evento['id'])
+    possiveis=detectar_possiveis_ganhadores(conn,evento['id'],sorteados,rodada)
+    pendentes_conferencia=[p for p in possiveis if not p['confirmado']]
     proximas=detectar_proximas_cartelas(conn,evento['id'],sorteados,rodada)
     ganhadores=conn.execute("""SELECT g.*,c.numero,c.comprador,c.telefone,v.nome vendedor,l.codigo lote FROM ganhadores g
         JOIN cartelas c ON c.id=g.cartela_id
         LEFT JOIN vendedores v ON v.id=c.vendedor_id
         LEFT JOIN lotes l ON l.id=c.lote_id
         WHERE g.evento_id=? AND g.confirmado=1 ORDER BY g.id DESC LIMIT 10""", (evento['id'],)).fetchall()
-    conn.close(); return render_template('sorteio.html', evento=evento, sorteados=sorteados, ultimos=list(reversed(sorteados[-8:])), possiveis=possiveis, proximas=proximas, rodada=rodada, ganhadores=ganhadores, padrao_label=padrao_label)
+    conn.close(); return render_template('sorteio.html', evento=evento, sorteados=sorteados, ultimos=list(reversed(sorteados[-8:])), possiveis=possiveis, pendentes_conferencia=pendentes_conferencia, proximas=proximas, rodada=rodada, ganhadores=ganhadores, padrao_label=padrao_label)
 
 
 @app.route('/conferir', methods=['POST'])
