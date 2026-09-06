@@ -29,7 +29,7 @@
       <div><span>Não vendidas</span><b>{{ dados.nao_vendidas }}</b><div class="bar-v4 mutedbar"><i style="width:{{ (dados.nao_vendidas / dados.total * 100) if dados.total else 0 }}%"></i></div></div>
     </div>
     <div class="payment-list-v4">
-      {% for p in dados.pagamentos %}<div><span>{{ p.forma }}</span><strong>{{ p.qtd }}</strong></div>{% else %}<p class="muted">Nenhuma venda registrada.</p>{% endfor %}
+      {% for p in dados.pagamentos %}<div><span>{{ p.forma }}</span><strong>{{ p.qtd }} • R$ {{ '%.2f'|format(p.valor) }}</strong></div>{% else %}<p class="muted">Nenhuma venda registrada.</p>{% endfor %}
     </div>
   </div>
   <div class="panel">
@@ -39,6 +39,18 @@
       <div class="round-card {% if r.status=='ativa' %}ativa{% endif %}"><div class="round-order">{{ r.ordem }}</div><div><strong>{{ r.nome }}</strong><div class="round-meta"><span>{{ padrao_label(r.padrao) }}</span><span>R$ {{ '%.2f'|format(r.premio) }}</span><span>{{ r.vencedores }} ganhador(es)</span></div></div></div>
       {% endfor %}
     </div>
+  </div>
+</section>
+
+<section class="grid-2">
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">RECEBIMENTOS</span><h3>Acertos por forma</h3></div></div>
+    <div class="payment-list-v4">{% for p in dados.acertos_forma %}<div><span>{{ p.forma }}</span><strong>R$ {{ '%.2f'|format(p.valor) }} <small>({{ p.qtd }} lançamento(s))</small></strong></div>{% else %}<p class="muted">Nenhum acerto registrado.</p>{% endfor %}</div>
+    <p class="muted">PIX e Outros são mantidos para conferência e relatório; não são somados ao dinheiro físico do caixa.</p>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><div><span class="eyebrow">MOVIMENTOS MANUAIS</span><h3>Entradas e saídas por forma</h3></div></div>
+    <div class="payment-list-v4">{% for p in dados.caixa_formas %}<div><span>{{ p.forma }}</span><strong>+ R$ {{ '%.2f'|format(p.entradas) }} / − R$ {{ '%.2f'|format(p.saidas) }}</strong></div>{% else %}<p class="muted">Nenhum movimento manual registrado.</p>{% endfor %}</div>
   </div>
 </section>
 

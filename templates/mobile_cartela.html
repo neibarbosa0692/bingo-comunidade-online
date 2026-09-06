@@ -15,7 +15,7 @@
   {% else %}
   <section class="mobile-card"><span class="eyebrow">REGISTRAR VENDA</span><h2>Confirmar esta cartela</h2>
   <form method="post" class="form-stack"><div class="seller-chip">Vendedor: <b>{{ vendedor.nome }}</b></div>
-  <label>Comprador (opcional)<input name="comprador" placeholder="Nome do comprador"></label><label>WhatsApp (opcional)<input name="telefone" placeholder="(91) 99999-9999"></label><label>Pagamento<select name="pagamento"><option value="">Não informado</option><option>PIX</option><option>Dinheiro</option><option>Outro</option></select></label><button class="btn btn-primary btn-full btn-xl">Confirmar venda</button></form></section>
+  <label>Comprador (opcional)<input name="comprador" placeholder="Nome do comprador"></label><label>WhatsApp (opcional)<input name="telefone" placeholder="(91) 99999-9999"></label><label>Pagamento<select name="pagamento"><option value="">Não informado</option><option>PIX</option><option>Dinheiro</option><option>Outros</option></select></label><button class="btn btn-primary btn-full btn-xl">Confirmar venda</button></form></section>
   {% endif %}
 {% elif card.status == 'vendida' %}
 <section class="mobile-card sold-info"><span class="eyebrow">DADOS DA VENDA</span><h2>Cartela registrada</h2><div class="mobile-data"><span>Comprador<b>{{ card.comprador or 'Não informado' }}</b></span><span>Vendedor<b>{{ card.vendedor or 'Não informado' }}</b></span><span>Pagamento<b>{{ card.pagamento or 'Não informado' }}</b></span></div></section>
