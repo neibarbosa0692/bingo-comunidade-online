@@ -1,12 +1,93 @@
 {% extends "base.html" %}{% block page_title %}Acerto Financeiro{% endblock %}{% block content %}
-<section class="money-hero"><div><span>Valor vendido</span><strong>R$ {{ '%.2f'|format(total_devido) }}</strong></div><div><span>Recebido dos vendedores</span><strong>R$ {{ '%.2f'|format(total_recebido) }}</strong></div><div><span>Saldo a receber</span><strong>R$ {{ '%.2f'|format(total_devido-total_recebido) }}</strong></div></section>
+<section class="money-hero"><div><span>Valor vendido</span><strong>R$ {{ '%.2f'|format(total_devido) }}</strong></div><div><span>Recebido dos vendedores</span><strong>R$ {{ '%.2f'|format(total_recebido) }}</strong></div><div><span>Saldo a receber</span><strong>R$ {{ '%.2f'|format(total_saldo) }}</strong></div></section>
+{% if total_excedente > 0.005 %}<div class="finance-warning-v10"><b>⚠ Existem R$ {{ '%.2f'|format(total_excedente) }} em recebimentos antigos acima do devido.</b><span>Use o botão <b>Corrigir</b> para ajustar o valor desses lançamentos. Novos acertos são bloqueados quando a soma ultrapassa o total devido pelo vendedor.</span></div>{% endif %}
 <section class="money-grid-v4">
   <div class="money-card-v4"><span>Dinheiro</span><strong>R$ {{ '%.2f'|format(totais_forma['Dinheiro']) }}</strong><small>Recebimento físico</small></div>
   <div class="money-card-v4"><span>PIX</span><strong>R$ {{ '%.2f'|format(totais_forma['PIX']) }}</strong><small>Registro e conferência • não compõe o caixa físico</small></div>
   <div class="money-card-v4"><span>Outros</span><strong>R$ {{ '%.2f'|format(totais_forma['Outros']) }}</strong><small>Registro e conferência • não compõe o caixa físico</small></div>
   {% if totais_forma['Não informado'] %}<div class="money-card-v4"><span>Não informado</span><strong>R$ {{ '%.2f'|format(totais_forma['Não informado']) }}</strong><small>Revisar forma de recebimento</small></div>{% endif %}
 </section>
-<section class="grid-2"><div class="panel"><span class="eyebrow">NOVO RECEBIMENTO</span><h3>Registrar acerto</h3><form method="post" class="form-stack"><label>Vendedor<select name="vendedor_id" required><option value="">Selecione</option>{% for r in resumo %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}</select></label><label>Valor recebido (R$)<input name="valor" required placeholder="500,00"></label><label>Forma de pagamento<select name="forma_pagamento" required><option>Dinheiro</option><option>PIX</option><option>Outros</option></select></label><label>Observação<input name="observacao" placeholder="Ex.: Acerto parcial"></label><button class="btn btn-primary">Registrar recebimento</button></form></div><div class="panel"><span class="eyebrow">REGRA DO CÁLCULO</span><h3>Prestação de contas automática</h3><p class="muted">O sistema calcula o valor devido usando as cartelas vendidas. Dinheiro, PIX e Outros ficam registrados separadamente. Somente os lançamentos em <b>Dinheiro</b> entram na conferência do caixa físico; PIX e Outros ficam para registro, conferência e relatório final.</p></div></section>
-<div class="panel"><div class="panel-head"><div><span class="eyebrow">POR VENDEDOR</span><h3>Situação financeira</h3></div></div><div class="table-wrap"><table><thead><tr><th>Vendedor</th><th>Com vendedor</th><th>Vendidas</th><th>Não vendidas</th><th>Devido</th><th>Recebido</th><th>Saldo</th></tr></thead><tbody>{% for r in resumo %}<tr><td><b>{{ r.nome }}</b></td><td>{{ r.distribuidas }}</td><td>{{ r.vendidas }}</td><td>{{ r.nao_vendidas }}</td><td>R$ {{ '%.2f'|format(r.devido) }}</td><td><b>R$ {{ '%.2f'|format(r.recebido) }}</b><small style="display:block;margin-top:4px">Din R$ {{ '%.2f'|format(r.dinheiro) }} • PIX R$ {{ '%.2f'|format(r.pix) }} • Outros R$ {{ '%.2f'|format(r.outros) }}</small></td><td><span class="saldo {% if r.saldo<=0 %}ok{% endif %}">R$ {{ '%.2f'|format(r.saldo) }}</span></td></tr>{% else %}<tr><td colspan="7">Nenhum vendedor cadastrado.</td></tr>{% endfor %}</tbody></table></div></div>
-<div class="panel"><div class="panel-head"><div><span class="eyebrow">HISTÓRICO</span><h3>Últimos recebimentos</h3></div></div><div class="table-wrap"><table><thead><tr><th>Data/hora (Brasília)</th><th>Vendedor</th><th>Valor</th><th>Forma</th><th>Observação</th><th>Recibo</th></tr></thead><tbody>{% for h in historico %}<tr><td>{{ h.criado_em|brasilia }}</td><td>{{ h.vendedor }}</td><td><b>R$ {{ '%.2f'|format(h.valor) }}</b></td><td>{{ h.forma_pagamento or 'Não informado' }}</td><td>{{ h.observacao or '—' }}</td><td><a class="receipt-link-v6" href="{{ url_for('comprovante_acerto',acerto_id=h.id) }}">Baixar PDF</a></td></tr>{% else %}<tr><td colspan="6">Nenhum recebimento registrado.</td></tr>{% endfor %}</tbody></table></div></div>
+<section class="grid-2"><div class="panel" id="novo-recebimento"><span class="eyebrow">NOVO RECEBIMENTO</span><h3>Registrar acerto</h3>
+<form method="post" class="form-stack" id="financeiroForm">
+<label>Vendedor
+  <input id="vendedorBuscaPrincipal" name="vendedor_busca" list="vendedoresFinanceiro" autocomplete="off" placeholder="Digite ou selecione o vendedor" required>
+  <input type="hidden" name="vendedor_id" id="vendedorIdPrincipal">
+</label>
+<datalist id="vendedoresFinanceiro">{% for v in vendedores_lookup %}<option value="{{ v.label }}"></option>{% endfor %}</datalist>
+<label>Valor recebido (R$)<input name="valor" required inputmode="decimal" placeholder="500,00"></label>
+<label>Forma de pagamento<select name="forma_pagamento" required id="formaPrincipal"><option>Dinheiro</option><option>PIX</option><option>Outros</option></select></label>
+<div class="limit-hint-v10" id="limitePrincipal">Selecione o vendedor para ver quanto ainda pode ser recebido no total.</div>
+<label>Observação<input name="observacao" placeholder="Ex.: Acerto parcial"></label><button class="btn btn-primary">Registrar recebimento</button></form></div>
+<div class="panel"><span class="eyebrow">REGRA DO CÁLCULO</span><h3>Prestação de contas protegida</h3><p class="muted">A forma de pagamento é livre: o acerto pode ser em Dinheiro, PIX ou Outros, em qualquer combinação. A proteção considera somente o total. A soma de todos os recebimentos de um vendedor nunca pode ultrapassar o valor devido pelas cartelas vendidas. Ex.: se o devido é R$ 100,00 e já foram registrados R$ 70,00, o próximo acerto pode ser de no máximo R$ 30,00 em qualquer forma.</p></div></section>
+
+<div class="panel" id="situacao-financeira"><div class="panel-head"><div><span class="eyebrow">POR VENDEDOR</span><h3>Situação financeira</h3></div></div><div class="table-wrap"><table class="finance-table-v10"><thead><tr><th>Vendedor</th><th>Com vendedor</th><th>Vendidas</th><th>Não vendidas</th><th>Devido</th><th>Recebido</th><th>Saldo</th><th>Ações</th></tr></thead><tbody>
+{% for r in resumo %}<tr class="{% if r.excedente>0.005 %}row-overpaid-v10{% endif %}"><td><b>{{ r.nome }}</b>{% if r.telefone %}<small class="seller-phone-v10">{{ r.telefone }}</small>{% endif %}</td><td>{{ r.distribuidas }}</td><td>{{ r.vendidas }}</td><td>{{ r.nao_vendidas }}</td><td>R$ {{ '%.2f'|format(r.devido) }}</td><td><b>R$ {{ '%.2f'|format(r.recebido) }}</b><small class="finance-breakdown-v10">Din R$ {{ '%.2f'|format(r.dinheiro) }} • PIX R$ {{ '%.2f'|format(r.pix) }} • Outros R$ {{ '%.2f'|format(r.outros) }}</small></td><td>{% if r.excedente>0.005 %}<span class="saldo finance-excess-v10">Excesso R$ {{ '%.2f'|format(r.excedente) }}</span>{% else %}<span class="saldo {% if r.saldo<=0 %}ok{% endif %}">R$ {{ '%.2f'|format(r.saldo) }}</span>{% endif %}</td><td><div class="finance-actions-v10"><button type="button" class="btn btn-primary btn-compact-v10 js-add-acerto" data-vendedor-id="{{ r.id }}">+ Acerto</button><button type="button" class="btn btn-compact-v10 js-corrigir-acerto" data-vendedor-id="{{ r.id }}" {% if not r.acertos_qtd %}disabled{% endif %}>Corrigir</button></div></td></tr>
+{% else %}<tr><td colspan="8">Nenhum vendedor cadastrado.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="panel" id="historico-acertos"><div class="panel-head"><div><span class="eyebrow">HISTÓRICO</span><h3>Últimos recebimentos</h3></div></div><div class="table-wrap"><table><thead><tr><th>Data/hora (Brasília)</th><th>Vendedor</th><th>Valor</th><th>Forma</th><th>Observação</th><th>Recibo</th><th>Ação</th></tr></thead><tbody>{% for h in historico %}<tr><td>{{ h.criado_em|brasilia }}</td><td>{{ h.vendedor }}</td><td><b>R$ {{ '%.2f'|format(h.valor) }}</b></td><td>{{ h.forma_pagamento or 'Não informado' }}</td><td>{{ h.observacao or '—' }}</td><td><a class="receipt-link-v6" href="{{ url_for('comprovante_acerto',acerto_id=h.id) }}">Baixar PDF</a></td><td><button type="button" class="btn btn-compact-v10 js-edit-receipt" data-acerto-id="{{ h.id }}">Corrigir</button></td></tr>{% else %}<tr><td colspan="7">Nenhum recebimento registrado.</td></tr>{% endfor %}</tbody></table></div></div>
+
+<!-- Popup de novo acerto direto pelo vendedor -->
+<div class="modal-backdrop-v10" id="modalNovoAcerto" hidden><div class="modal-v10"><button type="button" class="modal-close-v10 js-close-modal" aria-label="Fechar">×</button><span class="eyebrow">ACERTO DO VENDEDOR</span><h3 id="novoAcertoTitulo">Registrar recebimento</h3><form method="post" class="form-stack" id="novoAcertoForm"><input type="hidden" name="vendedor_id" id="novoAcertoVendedorId"><div class="seller-modal-chip-v10" id="novoAcertoVendedorNome"></div><label>Valor recebido (R$)<input name="valor" id="novoAcertoValor" inputmode="decimal" required></label><label>Forma de pagamento<select name="forma_pagamento" id="novoAcertoForma"><option>Dinheiro</option><option>PIX</option><option>Outros</option></select></label><div class="limit-hint-v10" id="novoAcertoLimite"></div><label>Observação<input name="observacao" placeholder="Ex.: Acerto parcial"></label><button class="btn btn-primary btn-full">Registrar recebimento</button></form></div></div>
+
+<!-- Popup de correção: altera somente o valor do lançamento -->
+<div class="modal-backdrop-v10" id="modalCorrigirAcerto" hidden><div class="modal-v10 modal-wide-v10"><button type="button" class="modal-close-v10 js-close-modal" aria-label="Fechar">×</button><span class="eyebrow">CORRIGIR RECEBIMENTO</span><h3>Corrigir valor do recebimento</h3><label>Recebimento a corrigir<select id="corrigirAcertoSelect"></select></label><div id="corrigirAcertoVazio" class="empty-correction-v10" hidden>Nenhum acerto registrado para este vendedor.</div><form method="post" class="form-stack" id="corrigirAcertoForm"><div class="correction-summary-v11" id="corrigirResumo"></div><label>Novo valor (R$)<input id="corrigirValor" name="valor" inputmode="decimal" required></label><div class="limit-hint-v10" id="corrigirLimite"></div><p class="muted correction-note-v11">A correção altera somente o valor. Vendedor, forma de pagamento, data e observação permanecem iguais.</p><div class="modal-actions-v10"><button class="btn btn-primary" type="submit">Salvar novo valor</button><button class="btn btn-danger" type="button" id="excluirAcertoBtn">Excluir lançamento</button></div></form><form method="post" id="excluirAcertoForm" hidden></form></div></div>
+
+<script>
+const FIN_VENDEDORES={{ vendedores_lookup|tojson }};
+const FIN_RESUMO={{ resumo_js|tojson }};
+const FIN_ACERTOS={{ acertos_js|tojson }};
+const FIN_ACERTO_BASE='/financeiro/acerto/';
+
+function moneyBR(v){return Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function sellerByLabel(value){const x=(value||'').trim().toLowerCase();return FIN_VENDEDORES.find(v=>v.label.toLowerCase()===x)||FIN_VENDEDORES.find(v=>v.nome.toLowerCase()===x);}
+function bindSellerSearch(input,hidden,onChange){
+  const sync=()=>{const v=sellerByLabel(input.value);hidden.value=v?v.id:'';if(onChange)onChange(v);};
+  input.addEventListener('input',sync);input.addEventListener('change',sync);return sync;
+}
+function limiteTotal(vendedorId){const r=FIN_RESUMO[String(vendedorId)];return r?Number(r.saldo||0):0;}
+function updateTotalLimit(el,vendedorId){
+  if(!vendedorId){el.textContent='Selecione o vendedor para ver quanto ainda pode ser recebido no total.';return;}
+  const r=FIN_RESUMO[String(vendedorId)], l=limiteTotal(vendedorId);
+  el.textContent=`Saldo máximo para novo acerto: R$ ${moneyBR(l)}. A forma de pagamento pode ser Dinheiro, PIX ou Outros.`;
+}
+
+const principalBusca=document.getElementById('vendedorBuscaPrincipal'), principalId=document.getElementById('vendedorIdPrincipal'), principalLimite=document.getElementById('limitePrincipal');
+bindSellerSearch(principalBusca,principalId,()=>updateTotalLimit(principalLimite,principalId.value));
+document.getElementById('financeiroForm').addEventListener('submit',e=>{if(!principalId.value){e.preventDefault();principalBusca.setCustomValidity('Selecione um vendedor da lista.');principalBusca.reportValidity();}else principalBusca.setCustomValidity('');});
+
+function openModal(id){document.getElementById(id).hidden=false;document.body.classList.add('modal-open-v10');}
+function closeModals(){document.querySelectorAll('.modal-backdrop-v10').forEach(m=>m.hidden=true);document.body.classList.remove('modal-open-v10');}
+document.querySelectorAll('.js-close-modal').forEach(b=>b.addEventListener('click',closeModals));document.querySelectorAll('.modal-backdrop-v10').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)closeModals();}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals();});
+
+const novoId=document.getElementById('novoAcertoVendedorId'),novoNome=document.getElementById('novoAcertoVendedorNome'),novoValor=document.getElementById('novoAcertoValor'),novoLimite=document.getElementById('novoAcertoLimite');
+function refreshNovoLimit(){const l=limiteTotal(novoId.value);updateTotalLimit(novoLimite,novoId.value);novoValor.value=l>0?moneyBR(l):'';}
+document.querySelectorAll('.js-add-acerto').forEach(b=>b.addEventListener('click',()=>{const id=String(b.dataset.vendedorId),v=FIN_VENDEDORES.find(x=>String(x.id)===id);novoId.value=id;novoNome.textContent=v?v.nome:'Vendedor';refreshNovoLimit();openModal('modalNovoAcerto');setTimeout(()=>novoValor.focus(),50);}));
+
+const corrSelect=document.getElementById('corrigirAcertoSelect'),corrForm=document.getElementById('corrigirAcertoForm'),corrValor=document.getElementById('corrigirValor'),corrResumo=document.getElementById('corrigirResumo'),corrLimite=document.getElementById('corrigirLimite'),corrVazio=document.getElementById('corrigirAcertoVazio'),deleteBtn=document.getElementById('excluirAcertoBtn'),deleteForm=document.getElementById('excluirAcertoForm');
+function correctionAvailable(a){
+  if(!a)return 0;
+  const base=FIN_RESUMO[String(a.vendedor_id)];
+  if(!base)return Number(a.valor||0);
+  // devido - (recebido total - valor do lançamento que está sendo corrigido)
+  return Math.max(Number(base.devido||0)-(Number(base.recebido||0)-Number(a.valor||0)),0);
+}
+function loadReceipt(id){
+  const a=FIN_ACERTOS.find(x=>String(x.id)===String(id));if(!a)return;
+  corrForm.action=FIN_ACERTO_BASE+a.id+'/editar';deleteForm.action=FIN_ACERTO_BASE+a.id+'/excluir';corrValor.value=moneyBR(a.valor);corrForm.dataset.acertoId=a.id;
+  corrResumo.innerHTML=`<b>${a.vendedor}</b><span>${a.forma_pagamento} • ${a.criado_em}</span>${a.observacao?`<small>${a.observacao}</small>`:''}`;
+  corrLimite.textContent=`Valor máximo permitido para este lançamento: R$ ${moneyBR(correctionAvailable(a))}.`;
+}
+function openCorrectionForSeller(sellerId,receiptId){
+  const list=FIN_ACERTOS.filter(a=>Number(a.vendedor_id)===Number(sellerId));corrSelect.innerHTML='';
+  list.forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=`${a.criado_em} • R$ ${moneyBR(a.valor)} • ${a.forma_pagamento}`;corrSelect.appendChild(o);});
+  const empty=!list.length;corrVazio.hidden=!empty;corrForm.hidden=empty;corrSelect.closest('label').hidden=empty;
+  if(!empty){const chosen=receiptId&&list.some(a=>String(a.id)===String(receiptId))?receiptId:list[0].id;corrSelect.value=chosen;loadReceipt(chosen);}
+  openModal('modalCorrigirAcerto');
+}
+corrSelect.addEventListener('change',()=>loadReceipt(corrSelect.value));
+document.querySelectorAll('.js-corrigir-acerto').forEach(b=>b.addEventListener('click',()=>openCorrectionForSeller(b.dataset.vendedorId)));
+document.querySelectorAll('.js-edit-receipt').forEach(b=>b.addEventListener('click',()=>{const a=FIN_ACERTOS.find(x=>String(x.id)===String(b.dataset.acertoId));if(a)openCorrectionForSeller(a.vendedor_id,a.id);}));
+deleteBtn.addEventListener('click',()=>{const a=FIN_ACERTOS.find(x=>String(x.id)===String(corrForm.dataset.acertoId));if(a&&confirm(`Excluir o recebimento de R$ ${moneyBR(a.valor)} de ${a.vendedor}? Esta ação recalculará o financeiro e o caixa.`))deleteForm.submit();});
+</script>
 {% endblock %}
