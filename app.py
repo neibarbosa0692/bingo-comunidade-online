@@ -56,7 +56,7 @@ CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
-SYSTEM_BUILD = 'V11.9-ALERTA-BINGO-POPUP-2026-09-06'
+SYSTEM_BUILD = 'V11.11-LIMITE-TOTAL-ACERTOS-2026-09-08'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
@@ -1160,7 +1160,7 @@ ENDPOINT_PERMISSAO = {
     'vendedores':'vendedores','distribuicao':'distribuicao',
     'vendas':'vendas','venda_cancelar':'vendas','comprovante_venda':'vendas',
     'busca':'busca',
-    'financeiro':'financeiro','comprovante_acerto':'financeiro','caixa':'caixa',
+    'financeiro':'financeiro','acerto_editar':'financeiro','acerto_excluir':'financeiro','comprovante_acerto':'financeiro','caixa':'caixa',
     'estatisticas':'estatisticas',
     'rodadas':'rodadas','rodada_acao':'rodadas',
     'acesso_movel':'celulares','acesso_movel_qr':'celulares','vendedor_acesso_qr':'celulares',
@@ -1297,7 +1297,7 @@ def _ensure_db():
     if request.endpoint in liberados:
         return None
     mutacoes = {
-        'cartelas', 'estoque', 'vendedores', 'distribuicao', 'vendas', 'venda_cancelar', 'financeiro', 'caixa',
+        'cartelas', 'estoque', 'vendedores', 'distribuicao', 'vendas', 'venda_cancelar', 'financeiro', 'acerto_editar', 'acerto_excluir', 'caixa',
         'rodadas', 'rodada_acao', 'mobile_cartela', 'sorteio', 'conferir',
         'confirmar_ganhador', 'reiniciar_sorteio'
     }
@@ -1872,30 +1872,135 @@ def vendas():
 def financeiro():
     conn=get_db(); evento=evento_ativo(conn)
     if request.method=='POST':
-        vendedor_id=int(request.form['vendedor_id'])
-        try: valor=float(request.form['valor'].replace(',','.'))
+        vendedor_raw=(request.form.get('vendedor_id') or '').strip()
+        vendedor_nome=(request.form.get('vendedor_busca') or '').strip()
+        vendedor=None
+        if vendedor_raw.isdigit():
+            vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(int(vendedor_raw),)).fetchone()
+        if not vendedor and vendedor_nome:
+            # Fallback para o campo pesquisável caso o navegador não tenha preenchido o hidden.
+            nome_limpo=vendedor_nome.split(' • ')[0].strip()
+            vendedor=conn.execute("SELECT * FROM vendedores WHERE LOWER(nome)=LOWER(?) ORDER BY id LIMIT 1",(nome_limpo,)).fetchone()
+        try: valor=float((request.form.get('valor') or '0').replace('.','').replace(',','.')) if ',' in (request.form.get('valor') or '') else float(request.form.get('valor') or 0)
         except ValueError: valor=0
         obs=request.form.get('observacao','').strip(); forma_pagamento=normalizar_forma_pagamento(request.form.get('forma_pagamento',''))
-        if valor>0:
-            conn.execute("INSERT INTO acertos (evento_id,vendedor_id,valor,observacao,criado_em,forma_pagamento) VALUES (?,?,?,?,?,?)",
-                         (evento['id'], vendedor_id, valor, obs, iso_brasilia(),forma_pagamento))
-            conn.commit(); flash(f'Recebimento registrado em {forma_pagamento}.', 'success')
+        if not vendedor:
+            flash('Selecione um vendedor válido.','danger')
+        elif valor<=0:
+            flash('Informe um valor de recebimento maior que zero.','danger')
+        elif forma_pagamento not in {'Dinheiro','PIX','Outros'}:
+            flash('Selecione uma forma de pagamento válida.','danger')
+        else:
+            # Regra V11.11: a forma de pagamento é livre. O único teto é o saldo TOTAL
+            # ainda devido pelo vendedor, independentemente de Dinheiro, PIX ou Outros.
+            # A transação IMMEDIATE evita que dois lançamentos simultâneos ultrapassem o teto.
+            conn.execute("BEGIN IMMEDIATE")
+            regra=_financeiro_resumo_vendedor(conn,evento,vendedor['id'])
+            limite=float(regra['saldo'])
+            if valor > limite + 0.005:
+                conn.rollback()
+                flash(
+                    f"Recebimento não registrado. {vendedor['nome']} deve no máximo R$ {regra['devido']:.2f} "
+                    f"e já possui R$ {regra['recebido']:.2f} em acertos. O saldo disponível para novo acerto é R$ {limite:.2f}.",
+                    'danger'
+                )
+            else:
+                conn.execute("INSERT INTO acertos (evento_id,vendedor_id,valor,observacao,criado_em,forma_pagamento) VALUES (?,?,?,?,?,?)",
+                             (evento['id'], vendedor['id'], valor, obs, iso_brasilia(),forma_pagamento))
+                conn.commit(); flash(f"Recebimento de R$ {valor:.2f} registrado para {vendedor['nome']} em {forma_pagamento}.", 'success')
+        conn.close()
+        return redirect(url_for('financeiro'))
+
     vendedores=conn.execute("SELECT * FROM vendedores ORDER BY nome").fetchall(); resumo=[]
     for v in vendedores:
-        dist=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=?", (evento['id'],v['id'])).fetchone()['c']
-        sold=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida'", (evento['id'],v['id'])).fetchone()['c']
-        formas=conn.execute("""SELECT """+_sql_forma_pagamento('forma_pagamento')+""" forma, COALESCE(SUM(valor),0) total
-            FROM acertos WHERE evento_id=? AND vendedor_id=? GROUP BY forma""", (evento['id'],v['id'])).fetchall()
-        por_forma={r['forma']:float(r['total'] or 0) for r in formas}
-        received=sum(por_forma.values())
-        due=sold*float(evento['valor_cartela']); resumo.append({'id':v['id'],'nome':v['nome'],'distribuidas':dist,'vendidas':sold,'nao_vendidas':max(dist-sold,0),'devido':due,'recebido':received,'saldo':due-received,'dinheiro':por_forma.get('Dinheiro',0),'pix':por_forma.get('PIX',0),'outros':por_forma.get('Outros',0),'nao_informado':por_forma.get('Não informado',0)})
-    historico=conn.execute("""SELECT a.*,v.nome vendedor FROM acertos a JOIN vendedores v ON v.id=a.vendedor_id
-        WHERE a.evento_id=? ORDER BY a.id DESC LIMIT 60""", (evento['id'],)).fetchall()
+        regra=_financeiro_resumo_vendedor(conn,evento,v['id'])
+        regra['nome']=v['nome']; regra['telefone']=v['telefone'] or ''; regra['online_ativo']=int(v['online_ativo'] or 0)
+        regra['acertos_qtd']=conn.execute("SELECT COUNT(*) c FROM acertos WHERE evento_id=? AND vendedor_id=?",(evento['id'],v['id'])).fetchone()['c']
+        resumo.append(regra)
+    historico_rows=conn.execute("""SELECT a.*,v.nome vendedor,v.telefone vendedor_telefone FROM acertos a JOIN vendedores v ON v.id=a.vendedor_id
+        WHERE a.evento_id=? ORDER BY a.id DESC LIMIT 100""", (evento['id'],)).fetchall()
+    historico=[dict(h) for h in historico_rows]
+    acertos_popup_rows=conn.execute("""SELECT a.*,v.nome vendedor FROM acertos a JOIN vendedores v ON v.id=a.vendedor_id
+        WHERE a.evento_id=? ORDER BY a.id DESC LIMIT 2000""",(evento['id'],)).fetchall()
     total_devido=sum(x['devido'] for x in resumo); total_recebido=sum(x['recebido'] for x in resumo)
+    total_saldo=sum(x['saldo'] for x in resumo); total_excedente=sum(x['excedente'] for x in resumo)
     totais_forma={'Dinheiro':0.0,'PIX':0.0,'Outros':0.0,'Não informado':0.0}
     for x in resumo:
         totais_forma['Dinheiro'] += x['dinheiro']; totais_forma['PIX'] += x['pix']; totais_forma['Outros'] += x['outros']; totais_forma['Não informado'] += x['nao_informado']
-    conn.close(); return render_template('financeiro.html', evento=evento, resumo=resumo, historico=historico, total_devido=total_devido, total_recebido=total_recebido, totais_forma=totais_forma)
+    vendedores_lookup=[{'id':int(v['id']),'nome':v['nome'],'telefone':v['telefone'] or '','label':v['nome'] + (f" • {v['telefone']}" if v['telefone'] else '')} for v in vendedores]
+    resumo_js={str(x['id']):{'id':x['id'],'nome':x['nome'],'devido':x['devido'],'recebido':x['recebido'],'saldo':x['saldo'],'excedente':x['excedente'],'limite_total':x['limite_total']} for x in resumo}
+    acertos_js=[{'id':int(h['id']),'vendedor_id':int(h['vendedor_id']),'vendedor':h['vendedor'],'valor':float(h['valor'] or 0),'forma_pagamento':normalizar_forma_pagamento(h['forma_pagamento']),'observacao':h['observacao'] or '','criado_em':formatar_brasilia(h['criado_em'])} for h in acertos_popup_rows]
+    conn.close(); return render_template('financeiro.html', evento=evento, resumo=resumo, historico=historico, total_devido=total_devido, total_recebido=total_recebido,
+        total_saldo=total_saldo,total_excedente=total_excedente,totais_forma=totais_forma,vendedores_lookup=vendedores_lookup,resumo_js=resumo_js,acertos_js=acertos_js)
+
+
+def _financeiro_resumo_vendedor(conn,evento,vendedor_id,ignorar_acerto_id=None):
+    eid=evento['id']; valor_cartela=float(evento['valor_cartela'] or 0)
+    dist=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=?", (eid,vendedor_id)).fetchone()['c']
+    sold=conn.execute("SELECT COUNT(*) c FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida'", (eid,vendedor_id)).fetchone()['c']
+    vendas_forma=conn.execute("SELECT "+_sql_forma_pagamento('pagamento')+" forma,COUNT(*) qtd FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status='vendida' GROUP BY forma",(eid,vendedor_id)).fetchall()
+    qtd_forma={r['forma']:int(r['qtd'] or 0) for r in vendas_forma}
+    devido_forma={f:float(qtd_forma.get(f,0))*valor_cartela for f in ['Dinheiro','PIX','Outros','Não informado']}
+    if ignorar_acerto_id:
+        formas=conn.execute("SELECT "+_sql_forma_pagamento('forma_pagamento')+" forma,COALESCE(SUM(valor),0) total FROM acertos WHERE evento_id=? AND vendedor_id=? AND id<>? GROUP BY forma",(eid,vendedor_id,ignorar_acerto_id)).fetchall()
+    else:
+        formas=conn.execute("SELECT "+_sql_forma_pagamento('forma_pagamento')+" forma,COALESCE(SUM(valor),0) total FROM acertos WHERE evento_id=? AND vendedor_id=? GROUP BY forma",(eid,vendedor_id)).fetchall()
+    recebido_forma={r['forma']:float(r['total'] or 0) for r in formas}
+    for f in ['Dinheiro','PIX','Outros','Não informado']:
+        recebido_forma.setdefault(f,0.0)
+    received=sum(recebido_forma.values()); due=sold*valor_cartela
+    saldo=max(due-received,0.0); excedente=max(received-due,0.0)
+    # A forma de pagamento não cria limites separados. O saldo total é o teto para
+    # qualquer novo acerto, seja Dinheiro, PIX ou Outros.
+    limite_total=round(saldo,2)
+    return {'id':int(vendedor_id),'distribuidas':dist,'vendidas':sold,'nao_vendidas':max(dist-sold,0),'devido':due,'recebido':received,'saldo':saldo,'excedente':excedente,
+            'dinheiro':recebido_forma['Dinheiro'],'pix':recebido_forma['PIX'],'outros':recebido_forma['Outros'],'nao_informado':recebido_forma['Não informado'],
+            'devido_forma':devido_forma,'recebido_forma':recebido_forma,'limite_total':limite_total}
+
+
+@app.route('/financeiro/acerto/<int:acerto_id>/editar', methods=['POST'])
+def acerto_editar(acerto_id):
+    conn=get_db(); evento=evento_ativo(conn); acerto=conn.execute("SELECT * FROM acertos WHERE id=? AND evento_id=?",(acerto_id,evento['id'])).fetchone()
+    if not acerto:
+        conn.close(); flash('Recebimento não encontrado.','danger'); return redirect(url_for('financeiro'))
+    try:
+        valor=float((request.form.get('valor') or '0').replace('.','').replace(',','.')) if ',' in (request.form.get('valor') or '') else float(request.form.get('valor') or 0)
+    except ValueError:
+        valor=0
+    if valor<=0:
+        flash('O valor corrigido precisa ser maior que zero.','danger')
+    else:
+        # Correção altera SOMENTE o valor. Vendedor, forma, data e observação permanecem.
+        conn.execute("BEGIN IMMEDIATE")
+        regra=_financeiro_resumo_vendedor(conn,evento,acerto['vendedor_id'],ignorar_acerto_id=acerto_id)
+        limite=float(regra['saldo'])
+        if valor > limite + 0.005:
+            conn.rollback()
+            vendedor=conn.execute("SELECT nome FROM vendedores WHERE id=?",(acerto['vendedor_id'],)).fetchone()
+            nome=vendedor['nome'] if vendedor else 'Vendedor'
+            flash(
+                f"Correção não salva. Desconsiderando este lançamento, {nome} ainda pode prestar contas de no máximo R$ {limite:.2f}. "+
+                f"O novo valor informado foi R$ {valor:.2f}.",
+                'danger'
+            )
+        else:
+            anterior=float(acerto['valor'] or 0)
+            conn.execute("UPDATE acertos SET valor=? WHERE id=?",(valor,acerto_id)); conn.commit()
+            gravar_auditoria('acerto_corrigido','acertos',json.dumps({'acerto_id':acerto_id,'valor_anterior':anterior,'valor_novo':valor},ensure_ascii=False),usuario_atual_id(),g.usuario['nome'] if getattr(g,'usuario',None) else None,evento['id'],request.remote_addr)
+            flash(f'Recebimento corrigido de R$ {anterior:.2f} para R$ {valor:.2f}.','success')
+    conn.close(); return redirect(url_for('financeiro'))
+
+
+@app.route('/financeiro/acerto/<int:acerto_id>/excluir', methods=['POST'])
+def acerto_excluir(acerto_id):
+    conn=get_db(); evento=evento_ativo(conn); acerto=conn.execute("SELECT a.*,v.nome vendedor FROM acertos a LEFT JOIN vendedores v ON v.id=a.vendedor_id WHERE a.id=? AND a.evento_id=?",(acerto_id,evento['id'])).fetchone()
+    if not acerto:
+        conn.close(); flash('Recebimento não encontrado.','danger'); return redirect(url_for('financeiro'))
+    detalhes={'acerto_id':acerto_id,'vendedor':acerto['vendedor'],'vendedor_id':acerto['vendedor_id'],'valor':acerto['valor'],'forma':normalizar_forma_pagamento(acerto['forma_pagamento']),'observacao':acerto['observacao'] or ''}
+    conn.execute("DELETE FROM acertos WHERE id=?",(acerto_id,)); conn.commit(); conn.close()
+    gravar_auditoria('acerto_excluido','acertos',json.dumps(detalhes,ensure_ascii=False),usuario_atual_id(),g.usuario['nome'] if getattr(g,'usuario',None) else None,evento['id'],request.remote_addr)
+    flash(f"Recebimento de R$ {float(acerto['valor']):.2f} excluído. O financeiro e o caixa foram recalculados.",'warning')
+    return redirect(url_for('financeiro'))
 
 
 @app.route('/rodadas', methods=['GET','POST'])
