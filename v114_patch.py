@@ -2,7 +2,8 @@
 
 - escolha entre sorteador do sistema e globo físico;
 - bloqueio do sorteio automático quando o globo estiver ativo;
-- lista completa de ganhadores no estado enviado ao telão.
+- lista completa de ganhadores no estado enviado ao telão;
+- proteção da grade numérica das cartelas já geradas.
 """
 from functools import wraps
 
@@ -15,7 +16,20 @@ def install(bingo):
     cols = {r['name'] for r in conn.execute("PRAGMA table_info(eventos)").fetchall()}
     if 'modo_sorteio' not in cols:
         conn.execute("ALTER TABLE eventos ADD COLUMN modo_sorteio TEXT")
-        conn.commit()
+
+    # A grade numérica de uma cartela passa a ser imutável depois de criada.
+    # Isso protege as cartelas físicas já impressas contra alterações acidentais,
+    # inclusive durante sincronizações entre o computador local e a nuvem.
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_cartelas_numeros_imutaveis
+        BEFORE UPDATE OF numeros ON cartelas
+        FOR EACH ROW
+        WHEN COALESCE(OLD.numeros,'') <> COALESCE(NEW.numeros,'')
+        BEGIN
+            SELECT RAISE(ABORT, 'A grade numerica da cartela e imutavel depois da geracao.');
+        END;
+    """)
+    conn.commit()
     conn.close()
 
     original_evento_acao = bingo.app.view_functions.get('sorteio_evento_acao')
