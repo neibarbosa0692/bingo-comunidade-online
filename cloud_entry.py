@@ -7,6 +7,12 @@ if os.environ.get('PORT') and not os.environ.get('BINGO_PORT'):
 import app as bingo
 
 bingo.init_db()
+
+# V11.4: instala os ajustes específicos da versão online depois que o banco
+# e todas as rotas do aplicativo principal já foram carregados.
+import v114_patch
+v114_patch.install(bingo)
+
 app = bingo.app
 
 if __name__ == '__main__':
