@@ -2,6 +2,7 @@
 {% block title %}Sorteio • Bingo Comunidade{% endblock %}
 {% block page_title %}Sorteio e Conferência{% endblock %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}">
 <div class="toolbar toolbar-split v7-draw-toolbar">
   <div class="v7-draw-statuses">
     {% if rodada %}<div class="active-round-chip"><span>RODADA ATIVA</span><strong>{{ rodada.nome }}</strong><small>{{ padrao_label(rodada.padrao) }}{% if rodada.premio %} • R$ {{ '%.2f'|format(rodada.premio) }}{% endif %}</small></div>{% else %}<div class="active-round-chip warning"><strong>Nenhuma rodada ativa</strong><a href="{{ url_for('rodadas') }}">Configurar rodadas</a></div>{% endif %}
@@ -9,7 +10,7 @@
   </div>
   <div class="v7-draw-buttons">
     {% if evento.status=='preparacao' %}
-      <form action="{{ url_for('sorteio_evento_acao', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="iniciar"><button class="btn btn-success-v7">▶ Iniciar evento</button></form>
+      <button type="button" class="btn btn-success-v7" id="openDrawMode">▶ Iniciar evento</button>
     {% elif evento.status=='encerrado' %}
       <form action="{{ url_for('sorteio_evento_acao', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="reabrir"><button class="btn">↻ Reabrir evento</button></form>
     {% endif %}
@@ -21,7 +22,8 @@
   <div class="draw-main">
     <div class="panel draw-panel">
       <span class="eyebrow">ÚLTIMO NÚMERO</span><div class="mega-ball">{{ ultimos[0] if ultimos else '—' }}</div>
-      <div class="draw-actions"><form method="post"><input type="hidden" name="acao" value="sortear"><button class="btn btn-primary btn-xl">Sortear número</button></form><form method="post" class="manual-draw"><input type="hidden" name="acao" value="manual"><input type="number" min="1" max="75" name="numero" placeholder="Digite"><button class="btn">Registrar</button></form></div>
+      <div class="draw-actions">{% if evento.modo_sorteio != 'globo' %}<form method="post"><input type="hidden" name="acao" value="sortear"><button class="btn btn-primary btn-xl">Sortear número</button></form>{% endif %}<form method="post" class="manual-draw"><input type="hidden" name="acao" value="manual"><input type="number" min="1" max="75" name="numero" placeholder="Digite"><button class="btn">Registrar</button></form></div>
+      {% if evento.status=='em_andamento' and evento.modo_sorteio=='globo' %}<div class="v114-draw-mode-note">🎱 Modo Globo físico ativo — registre manualmente cada número chamado.</div>{% elif evento.status=='em_andamento' and evento.modo_sorteio=='sistema' %}<div class="v114-draw-mode-note system">💻 Sorteador do sistema ativo.</div>{% endif %}
       <div class="last-balls">{% for n in ultimos %}<div class="ball">{{ n }}</div>{% endfor %}</div>
     </div>
     <div class="panel"><div class="panel-head"><div><span class="eyebrow">MAPA DO SORTEIO</span><h3>{{ sorteados|length }} de 75 números chamados</h3></div></div><div class="number-board">{% for n in range(1,76) %}<span class="{% if n in sorteados %}hit{% endif %}">{{ n }}</span>{% endfor %}</div></div>
@@ -39,46 +41,17 @@
   <div class="panel-head"><div><span class="eyebrow">DETECÇÃO AUTOMÁTICA</span><h3>Cartelas próximas do bingo</h3></div><span class="badge">Atualiza a cada número</span></div>
   <div class="v7-near-grid">
     {% for falta in [5,4,3,2,1] %}
-    <div class="v7-near-group {% if falta==1 %}armed{% endif %}">
-      <div class="v7-near-head"><span>{% if falta==1 %}ARMADAS{% else %}FALTAM {{ falta }}{% endif %}</span><b>{{ proximas[falta]|length }}</b></div>
-      <div class="v7-near-list">
-        {% for c in proximas[falta] %}
-        <div class="v7-near-card"><strong>{{ '%04d'|format(c.numero) }}</strong><small>{% if c.comprador %}{{ c.comprador }}{% elif c.vendedor %}{{ c.vendedor }}{% else %}Venda registrada{% endif %}</small><em>Falta{% if c.faltantes|length > 1 %}m{% endif %}: {{ c.faltantes|join(', ') }}</em></div>
-        {% else %}<span class="v7-empty-near">Nenhuma</span>{% endfor %}
-      </div>
-    </div>
+    <div class="v7-near-group {% if falta==1 %}armed{% endif %}"><div class="v7-near-head"><span>{% if falta==1 %}ARMADAS{% else %}FALTAM {{ falta }}{% endif %}</span><b>{{ proximas[falta]|length }}</b></div><div class="v7-near-list">{% for c in proximas[falta] %}<div class="v7-near-card"><strong>{{ '%04d'|format(c.numero) }}</strong><small>{% if c.comprador %}{{ c.comprador }}{% elif c.vendedor %}{{ c.vendedor }}{% else %}Venda registrada{% endif %}</small><em>Falta{% if c.faltantes|length > 1 %}m{% endif %}: {{ c.faltantes|join(', ') }}</em></div>{% else %}<span class="v7-empty-near">Nenhuma</span>{% endfor %}</div></div>
     {% endfor %}
   </div>
-
 </div>
+
+{% if evento.status=='preparacao' %}
+<div id="drawModeModal" class="v114-mode-backdrop" hidden><section class="v114-mode-modal" role="dialog" aria-modal="true" aria-labelledby="drawModeTitle"><span class="eyebrow">INICIAR SORTEIO</span><h2 id="drawModeTitle">Como os números serão sorteados?</h2><p>Escolha uma opção antes de iniciar o evento. No modo com globo físico, o botão “Sortear número” ficará oculto para evitar cliques acidentais.</p><div class="v114-mode-options"><form action="{{ url_for('sorteio_evento_acao', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="iniciar"><input type="hidden" name="modo_sorteio" value="sistema"><button class="v114-mode-option" type="submit"><b>💻 Sorteador do sistema</b><span>Usar o botão “Sortear número”.</span></button></form><form action="{{ url_for('sorteio_evento_acao', evento_id=evento.id) }}" method="post"><input type="hidden" name="acao" value="iniciar"><input type="hidden" name="modo_sorteio" value="globo"><button class="v114-mode-option" type="submit"><b>🎱 Globo físico</b><span>Ocultar o sorteador automático e registrar os números manualmente.</span></button></form></div><button type="button" class="btn btn-full" id="closeDrawMode">Cancelar</button></section></div>
+<script>(()=>{const m=document.getElementById('drawModeModal'),o=document.getElementById('openDrawMode'),c=document.getElementById('closeDrawMode');if(!m||!o)return;o.addEventListener('click',()=>m.hidden=false);if(c)c.addEventListener('click',()=>m.hidden=true);m.addEventListener('click',e=>{if(e.target===m)m.hidden=true});})();</script>
+{% endif %}
 
 {% if pendentes_conferencia %}
-<div class="v9-bingo-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="v9BingoAlertTitle">
-  <section class="v9-bingo-modal">
-    <div class="v9-bingo-alert-head">
-      <div class="v9-alert-icon">!</div>
-      <div><span>POSSÍVEL GANHADOR DETECTADO</span><h2 id="v9BingoAlertTitle">Sorteio pausado para conferência</h2><p>Não é possível chamar outro número enquanto existir cartela aguardando conferência.</p></div>
-    </div>
-    <div class="v9-bingo-pending-list">
-      {% for p in pendentes_conferencia %}
-      <article class="v9-bingo-candidate">
-        <div class="v9-candidate-info">
-          <div class="v9-candidate-number"><span>CARTELA</span><strong>{{ '%04d'|format(p.numero) }}</strong></div>
-          <div class="v9-candidate-meta"><b>{{ p.padrao }}</b><span>{{ p.comprador or 'Comprador não informado' }}</span><small>{% if p.lote %}Lote {{ p.lote }}{% endif %}{% if p.vendedor %}{% if p.lote %} • {% endif %}Vendedor: {{ p.vendedor }}{% endif %}{% if p.telefone %} • {{ p.telefone }}{% endif %}</small></div>
-        </div>
-        <div class="v9-mini-bingo" aria-label="Cartela {{ '%04d'|format(p.numero) }}">
-          <div class="v9-mini-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div>
-          {% for row in p.grade %}<div class="v9-mini-row">{% for n in row %}<span class="{% if n==0 or n in sorteados %}hit{% endif %} {% if n==0 %}free{% endif %}">{{ '★' if n==0 else n }}</span>{% endfor %}</div>{% endfor %}
-        </div>
-        <div class="v9-candidate-actions">
-          <p>Confira a cartela física/QR. Se os dados estiverem corretos, confirme o ganhador para liberar o sorteio.</p>
-          <form action="{{ url_for('confirmar_ganhador', numero=p.numero) }}" method="post"><button class="btn btn-primary btn-xl btn-full">✓ Confirmar ganhador {{ '%04d'|format(p.numero) }}</button></form>
-        </div>
-      </article>
-      {% endfor %}
-    </div>
-    <div class="v9-modal-lock-note">🔒 O pop-up não pode ser fechado enquanto houver uma possível cartela vencedora sem conferência.</div>
-  </section>
-</div>
+<div class="v9-bingo-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="v9BingoAlertTitle"><section class="v9-bingo-modal"><div class="v9-bingo-alert-head"><div class="v9-alert-icon">!</div><div><span>POSSÍVEL GANHADOR DETECTADO</span><h2 id="v9BingoAlertTitle">Sorteio pausado para conferência</h2><p>Não é possível chamar outro número enquanto existir cartela aguardando conferência.</p></div></div><div class="v9-bingo-pending-list">{% for p in pendentes_conferencia %}<article class="v9-bingo-candidate"><div class="v9-candidate-info"><div class="v9-candidate-number"><span>CARTELA</span><strong>{{ '%04d'|format(p.numero) }}</strong></div><div class="v9-candidate-meta"><b>{{ p.padrao }}</b><span>{{ p.comprador or 'Comprador não informado' }}</span><small>{% if p.lote %}Lote {{ p.lote }}{% endif %}{% if p.vendedor %}{% if p.lote %} • {% endif %}Vendedor: {{ p.vendedor }}{% endif %}{% if p.telefone %} • {{ p.telefone }}{% endif %}</small></div></div><div class="v9-mini-bingo" aria-label="Cartela {{ '%04d'|format(p.numero) }}"><div class="v9-mini-head"><b>B</b><b>I</b><b>N</b><b>G</b><b>O</b></div>{% for row in p.grade %}<div class="v9-mini-row">{% for n in row %}<span class="{% if n==0 or n in sorteados %}hit{% endif %} {% if n==0 %}free{% endif %}">{{ '★' if n==0 else n }}</span>{% endfor %}</div>{% endfor %}</div><div class="v9-candidate-actions"><p>Confira a cartela física/QR. Se os dados estiverem corretos, confirme o ganhador para liberar o sorteio.</p><form action="{{ url_for('confirmar_ganhador', numero=p.numero) }}" method="post"><button class="btn btn-primary btn-xl btn-full">✓ Confirmar ganhador {{ '%04d'|format(p.numero) }}</button></form></div></article>{% endfor %}</div><div class="v9-modal-lock-note">🔒 O pop-up não pode ser fechado enquanto houver uma possível cartela vencedora sem conferência.</div></section></div>
 {% endif %}
 {% endblock %}
