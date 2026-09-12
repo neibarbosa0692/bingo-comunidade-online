@@ -1,0 +1,20 @@
+{
+  "name": "Bingo Comunidade",
+  "short_name": "Bingo",
+  "description": "Sistema Bingo Comunidade — operação online e offline.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f6fb",
+  "theme_color": "#5b46e8",
+  "icons": [
+    {"src": "/static/favicon.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Visão geral", "short_name": "Início", "url": "/"},
+    {"name": "Cartelas", "short_name": "Cartelas", "url": "/cartelas"},
+    {"name": "Telão", "short_name": "Telão", "url": "/telao"}
+  ]
+}
