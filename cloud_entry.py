@@ -13,6 +13,10 @@ bingo.init_db()
 import v114_patch
 v114_patch.install(bingo)
 
+# V11.5: transforma a interface web em PWA instalável.
+import pwa_patch
+pwa_patch.install(bingo)
+
 app = bingo.app
 
 if __name__ == '__main__':
