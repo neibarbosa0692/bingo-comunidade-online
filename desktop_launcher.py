@@ -20,7 +20,10 @@ BASE_DIR = runtime_dir()
 DB_PATH = BASE_DIR / 'bingo.db'
 PORT_FILE = BASE_DIR / '.porta_ativa.txt'
 SECRET_FILE = BASE_DIR / '.secret_key'
+STOP_FILE = BASE_DIR / '.encerrar_servidor'
 PORTA_PADRAO = 8765
+DISCOVERY_PORT = 8764
+DISCOVERY_MAGIC = b'BINGO_COMUNIDADE_DISCOVER_V1'
 
 os.environ['BINGO_DB_PATH'] = str(DB_PATH)
 os.environ['BINGO_MODE'] = 'local'
@@ -31,9 +34,9 @@ if SECRET_FILE.exists() and not os.environ.get('BINGO_SECRET_KEY'):
         pass
 
 
-def servidor_bingo_ativo(porta: int) -> bool:
+def servidor_bingo_ativo(porta: int, host='127.0.0.1') -> bool:
     try:
-        with urllib.request.urlopen(f'http://127.0.0.1:{porta}/health', timeout=.8) as r:
+        with urllib.request.urlopen(f'http://{host}:{porta}/health', timeout=.8) as r:
             return r.status == 200
     except Exception:
         return False
@@ -92,7 +95,8 @@ from werkzeug.serving import make_server  # noqa: E402
 
 class ServidorBingo(threading.Thread):
     def __init__(self):
-        super().__init__(daemon=True)
+        # Nao-daemon: o servidor continua ativo mesmo depois de fechar a janela principal.
+        super().__init__(daemon=False)
         self.httpd = make_server('0.0.0.0', PORTA, bingo.app, threaded=True)
 
     def run(self):
@@ -100,6 +104,53 @@ class ServidorBingo(threading.Thread):
 
     def parar(self):
         self.httpd.shutdown()
+
+
+class DescobertaRede(threading.Thread):
+    def __init__(self, porta_http: int):
+        super().__init__(daemon=True)
+        self.porta_http = porta_http
+        self.rodando = True
+        self.sock = None
+
+    def parar(self):
+        self.rodando = False
+        try:
+            if self.sock:
+                self.sock.close()
+        except Exception:
+            pass
+
+    def run(self):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.sock = sock
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('', DISCOVERY_PORT))
+            sock.settimeout(1.0)
+            while self.rodando:
+                try:
+                    data, addr = sock.recvfrom(1024)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+                if data.strip() != DISCOVERY_MAGIC:
+                    continue
+                try:
+                    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    probe.connect((addr[0], 9))
+                    ip = probe.getsockname()[0]
+                    probe.close()
+                except Exception:
+                    ip = ip_rede_local()
+                resposta = f'BINGO_COMUNIDADE_SERVER_V1|{ip}|{self.porta_http}'.encode('utf-8')
+                try:
+                    sock.sendto(resposta, addr)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
 
 POPUP_SCRIPT = r"""
@@ -183,14 +234,9 @@ class DesktopApi:
                 return False
             largura, altura, minimo = tamanho_para_url(url)
             janela = webview.create_window(
-                titulo_para_url(url),
-                url,
-                width=largura,
-                height=altura,
-                min_size=minimo,
-                resizable=True,
-                fullscreen=False,
-                confirm_close=False,
+                titulo_para_url(url), url,
+                width=largura, height=altura, min_size=minimo,
+                resizable=True, fullscreen=False, confirm_close=False,
                 js_api=self,
             )
             instalar_interceptador_popup(janela)
@@ -200,24 +246,16 @@ class DesktopApi:
 
 
 def abrir_janela_app(porta: int):
-    """Abre o Bingo como aplicativo Windows e mantém pop-ups locais em janelas nativas."""
     import webview
-
     api = DesktopApi(porta)
     url = f'http://127.0.0.1:{porta}/'
     janela = webview.create_window(
-        'Bingo Comunidade',
-        url,
-        width=1380,
-        height=860,
-        min_size=(960, 640),
-        resizable=True,
-        fullscreen=False,
-        confirm_close=False,
+        'Bingo Comunidade', url,
+        width=1380, height=860, min_size=(960, 640),
+        resizable=True, fullscreen=False, confirm_close=False,
         js_api=api,
     )
     instalar_interceptador_popup(janela)
-    # No Windows o pywebview usa preferencialmente o Microsoft Edge WebView2.
     webview.start(debug=False)
 
 
@@ -226,23 +264,37 @@ class JanelaCentral(tk.Tk):
         super().__init__()
         self.servidor = servidor
         self.title('Bingo Comunidade — Central')
-        self.geometry('570x430')
-        self.minsize(540, 410)
+        self.geometry('610x500')
+        self.minsize(570, 460)
         self.protocol('WM_DELETE_WINDOW', self.destroy)
         self.url_local = f'http://127.0.0.1:{PORTA}'
         self.url_rede = f'http://{ip_rede_local()}:{PORTA}'
         frame = tk.Frame(self, padx=28, pady=24)
         frame.pack(fill='both', expand=True)
         tk.Label(frame, text='Bingo Comunidade', font=('Segoe UI', 22, 'bold')).pack(anchor='w')
-        tk.Label(frame, text='Central administrativa do servidor local', font=('Segoe UI', 10)).pack(anchor='w', pady=(0, 20))
+        tk.Label(frame, text='Servidor principal da rede local', font=('Segoe UI', 10)).pack(anchor='w', pady=(0, 20))
         tk.Label(frame, text=f'● Servidor ativo na porta {PORTA}', font=('Segoe UI', 11, 'bold')).pack(anchor='w', pady=(0, 12))
         tk.Label(frame, text='Banco oficial:', font=('Segoe UI', 9, 'bold')).pack(anchor='w')
-        tk.Label(frame, text=str(DB_PATH), wraplength=500, justify='left', font=('Segoe UI', 9)).pack(anchor='w', pady=(0, 12))
+        tk.Label(frame, text=str(DB_PATH), wraplength=540, justify='left', font=('Segoe UI', 9)).pack(anchor='w', pady=(0, 12))
         tk.Label(frame, text='Acesso neste computador:', font=('Segoe UI', 9, 'bold')).pack(anchor='w')
         tk.Label(frame, text=self.url_local, font=('Segoe UI', 10)).pack(anchor='w')
-        tk.Label(frame, text='Acesso na mesma rede Wi-Fi:', font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(10, 0))
-        tk.Label(frame, text=self.url_rede, font=('Segoe UI', 10)).pack(anchor='w')
-        tk.Label(frame, text='Esta central é opcional. O uso normal é pelo atalho do Bingo Comunidade, que abre a janela do aplicativo diretamente.', font=('Segoe UI', 9), wraplength=500, justify='left').pack(anchor='w', pady=(18, 0))
+        tk.Label(frame, text='Acesso para outros notebooks/celulares na mesma rede:', font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(10, 0))
+        tk.Label(frame, text=self.url_rede, font=('Segoe UI', 10, 'bold')).pack(anchor='w')
+        tk.Label(frame, text='O aplicativo Coordenação encontra este servidor automaticamente. Fechar a janela principal do Bingo não derruba mais o servidor.', font=('Segoe UI', 9), wraplength=540, justify='left').pack(anchor='w', pady=(18, 12))
+        tk.Button(frame, text='Encerrar servidor do Bingo', command=self.encerrar_servidor, padx=14, pady=9).pack(anchor='w', pady=(8, 0))
+
+    def encerrar_servidor(self):
+        if not messagebox.askyesno('Encerrar servidor', 'Isso desconectará o notebook da coordenação, celulares e telão. Deseja continuar?'):
+            return
+        try:
+            if self.servidor:
+                self.servidor.parar()
+            else:
+                STOP_FILE.write_text('1', encoding='utf-8')
+        except Exception as exc:
+            messagebox.showerror('Bingo Comunidade', str(exc))
+            return
+        self.destroy()
 
 
 def preparar_bingo():
@@ -262,29 +314,59 @@ def preparar_bingo():
     return banco_existia
 
 
+def vigiar_encerramento(servidor, descoberta):
+    def worker():
+        while servidor.is_alive():
+            if STOP_FILE.exists():
+                try:
+                    STOP_FILE.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                try:
+                    descoberta.parar()
+                except Exception:
+                    pass
+                try:
+                    servidor.parar()
+                except Exception:
+                    pass
+                try:
+                    PORT_FILE.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                break
+            time.sleep(.5)
+    threading.Thread(target=worker, daemon=True).start()
+
+
 def iniciar_servidor():
     banco_existia = preparar_bingo()
+    try:
+        STOP_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
     servidor = ServidorBingo()
     servidor.start()
     for _ in range(80):
         if servidor_bingo_ativo(PORTA):
             PORT_FILE.write_text(str(PORTA), encoding='utf-8')
-            return servidor, banco_existia
+            descoberta = DescobertaRede(PORTA)
+            descoberta.start()
+            vigiar_encerramento(servidor, descoberta)
+            return servidor, descoberta, banco_existia
         time.sleep(.25)
     servidor.parar()
     raise RuntimeError('O servidor não respondeu a tempo.')
 
 
 def mostrar_erro(texto):
-    root = tk.Tk()
-    root.withdraw()
+    root = tk.Tk(); root.withdraw()
     messagebox.showerror('Bingo Comunidade', texto)
     root.destroy()
 
 
 def avisar_banco_novo():
-    root = tk.Tk()
-    root.withdraw()
+    root = tk.Tk(); root.withdraw()
     messagebox.showwarning(
         'Bingo Comunidade',
         'ATENÇÃO: não foi encontrado bingo.db ao lado do EXE. Um banco novo foi criado.\n\n'
@@ -298,10 +380,9 @@ def main():
         servidor = None
         if PORTA_EXISTENTE is None:
             try:
-                servidor, _ = iniciar_servidor()
+                servidor, _, _ = iniciar_servidor()
             except Exception as exc:
-                mostrar_erro(str(exc))
-                return
+                mostrar_erro(str(exc)); return
         JanelaCentral(servidor).mainloop()
         return
 
@@ -314,22 +395,19 @@ def main():
 
     servidor = None
     try:
-        servidor, banco_existia = iniciar_servidor()
+        servidor, descoberta, banco_existia = iniciar_servidor()
         if not banco_existia:
             avisar_banco_novo()
         abrir_janela_app(PORTA)
+        # Ao fechar a janela principal, o processo continua como servidor em segundo plano.
+        # Um novo clique no EXE reabre a janela. Para encerrar, use --central.
     except Exception as exc:
         mostrar_erro(str(exc))
-    finally:
         if servidor:
             try:
                 servidor.parar()
             except Exception:
                 pass
-        try:
-            PORT_FILE.unlink(missing_ok=True)
-        except Exception:
-            pass
 
 
 if __name__ == '__main__':
