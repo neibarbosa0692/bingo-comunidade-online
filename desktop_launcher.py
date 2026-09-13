@@ -5,7 +5,6 @@ import sys
 import threading
 import time
 import urllib.request
-import webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
@@ -83,16 +82,26 @@ def ip_rede_local():
             return '127.0.0.1'
 
 
-def abrir_sistema(porta: int):
-    webbrowser.open(f'http://127.0.0.1:{porta}/')
+def abrir_janela_app(porta: int):
+    """Abre o Bingo como aplicativo Windows, sem barra/endereço do navegador."""
+    import webview
+
+    url = f'http://127.0.0.1:{porta}/'
+    webview.create_window(
+        'Bingo Comunidade',
+        url,
+        width=1380,
+        height=860,
+        min_size=(960, 640),
+        resizable=True,
+        fullscreen=False,
+        confirm_close=False,
+    )
+    # No Windows o pywebview usa preferencialmente o Microsoft Edge WebView2.
+    webview.start(debug=False)
 
 
-# Segundo clique: se o servidor já está ativo, apenas abre o sistema e termina.
 PORTA_EXISTENTE = porta_servidor_existente()
-if PORTA_EXISTENTE is not None and '--central' not in sys.argv:
-    abrir_sistema(PORTA_EXISTENTE)
-    raise SystemExit(0)
-
 PORTA = PORTA_EXISTENTE or porta_livre()
 os.environ['BINGO_PORT'] = str(PORTA)
 
@@ -113,13 +122,13 @@ class ServidorBingo(threading.Thread):
 
 
 class JanelaCentral(tk.Tk):
-    def __init__(self, servidor):
+    def __init__(self, servidor=None):
         super().__init__()
         self.servidor = servidor
         self.title('Bingo Comunidade — Central')
         self.geometry('570x430')
         self.minsize(540, 410)
-        self.protocol('WM_DELETE_WINDOW', self.ocultar)
+        self.protocol('WM_DELETE_WINDOW', self.destroy)
         self.url_local = f'http://127.0.0.1:{PORTA}'
         self.url_rede = f'http://{ip_rede_local()}:{PORTA}'
         frame = tk.Frame(self, padx=28, pady=24)
@@ -133,29 +142,10 @@ class JanelaCentral(tk.Tk):
         tk.Label(frame, text=self.url_local, font=('Segoe UI', 10)).pack(anchor='w')
         tk.Label(frame, text='Acesso na mesma rede Wi-Fi:', font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(10, 0))
         tk.Label(frame, text=self.url_rede, font=('Segoe UI', 10)).pack(anchor='w')
-        botoes = tk.Frame(frame)
-        botoes.pack(fill='x', pady=(22, 8))
-        for texto, rota in [('Abrir sistema', '/'), ('Abrir cartelas', '/cartelas'), ('Abrir telão', '/telao'), ('Backups', '/backups')]:
-            tk.Button(botoes, text=texto, command=lambda r=rota: webbrowser.open(self.url_local+r), padx=12, pady=8).pack(side='left', padx=(0, 8))
-        tk.Button(frame, text='Encerrar Bingo Comunidade', command=self.encerrar, padx=12, pady=8).pack(anchor='w', pady=(10, 0))
-        tk.Label(frame, text='Fechar esta janela apenas a oculta. O servidor continua funcionando para o computador, celulares e telão.', font=('Segoe UI', 9), wraplength=500, justify='left').pack(anchor='w', pady=(18, 0))
-
-    def ocultar(self):
-        self.withdraw()
-
-    def encerrar(self):
-        if messagebox.askyesno('Encerrar', 'Deseja encerrar o servidor do Bingo Comunidade?'):
-            try:
-                self.servidor.parar()
-                try:
-                    PORT_FILE.unlink(missing_ok=True)
-                except Exception:
-                    pass
-            finally:
-                self.destroy()
+        tk.Label(frame, text='Esta central é opcional. O uso normal é pelo atalho do Bingo Comunidade, que abre a janela do aplicativo diretamente.', font=('Segoe UI', 9), wraplength=500, justify='left').pack(anchor='w', pady=(18, 0))
 
 
-def iniciar_servidor():
+def preparar_bingo():
     banco_existia = DB_PATH.exists()
     bingo.init_db()
     try:
@@ -169,9 +159,13 @@ def iniciar_servidor():
     except Exception:
         pass
     bingo.start_sync_worker()
+    return banco_existia
+
+
+def iniciar_servidor():
+    banco_existia = preparar_bingo()
     servidor = ServidorBingo()
     servidor.start()
-    url = f'http://127.0.0.1:{PORTA}'
     for _ in range(80):
         if servidor_bingo_ativo(PORTA):
             PORT_FILE.write_text(str(PORTA), encoding='utf-8')
@@ -181,34 +175,64 @@ def iniciar_servidor():
     raise RuntimeError('O servidor não respondeu a tempo.')
 
 
+def mostrar_erro(texto):
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror('Bingo Comunidade', texto)
+    root.destroy()
+
+
+def avisar_banco_novo():
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showwarning(
+        'Bingo Comunidade',
+        'ATENÇÃO: não foi encontrado bingo.db ao lado do EXE. Um banco novo foi criado.\n\n'
+        'Se este computador possui o banco oficial das 500 cartelas, feche o programa e coloque o bingo.db correto ao lado do EXE.'
+    )
+    root.destroy()
+
+
 def main():
-    # --central continua disponível para manutenção, mas não faz parte do uso normal.
-    if PORTA_EXISTENTE is not None:
-        abrir_sistema(PORTA_EXISTENTE)
+    # Central administrativa opcional: Bingo Comunidade.exe --central
+    if '--central' in sys.argv:
+        servidor = None
+        if PORTA_EXISTENTE is None:
+            try:
+                servidor, _ = iniciar_servidor()
+            except Exception as exc:
+                mostrar_erro(str(exc))
+                return
+        JanelaCentral(servidor).mainloop()
         return
+
+    # Se já existe um servidor do Bingo rodando, apenas abre uma nova janela nativa.
+    if PORTA_EXISTENTE is not None:
+        try:
+            abrir_janela_app(PORTA_EXISTENTE)
+        except Exception as exc:
+            mostrar_erro(f'Não foi possível abrir a janela do aplicativo.\n\n{exc}')
+        return
+
+    servidor = None
     try:
         servidor, banco_existia = iniciar_servidor()
+        if not banco_existia:
+            avisar_banco_novo()
+        abrir_janela_app(PORTA)
     except Exception as exc:
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror('Bingo Comunidade', str(exc))
-        root.destroy()
-        return
-
-    abrir_sistema(PORTA)
-
-    # Mantemos um loop Tk invisível para que o processo continue vivo sem janela.
-    central = JanelaCentral(servidor)
-    if '--central' not in sys.argv:
-        central.withdraw()
-    if not banco_existia:
-        central.deiconify()
-        messagebox.showwarning(
-            'Bingo Comunidade',
-            'ATENÇÃO: não foi encontrado bingo.db ao lado do EXE. Um banco novo foi criado.\n\n'
-            'Se este computador possui o banco oficial das 500 cartelas, feche o programa e coloque o bingo.db correto ao lado do EXE.'
-        )
-    central.mainloop()
+        mostrar_erro(str(exc))
+    finally:
+        # Fechar a janela principal encerra o servidor local, como um programa normal.
+        if servidor:
+            try:
+                servidor.parar()
+            except Exception:
+                pass
+        try:
+            PORT_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
