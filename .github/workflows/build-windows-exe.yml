@@ -6,7 +6,9 @@ on:
     branches: [ main ]
     paths:
       - 'desktop_launcher.py'
+      - 'coord_launcher.py'
       - 'BingoComunidade.spec'
+      - 'BingoCoordenacao.spec'
       - 'requirements_desktop.txt'
       - 'requirements.txt'
       - 'app.py'
@@ -35,31 +37,44 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m py_compile app.py desktop_launcher.py cloud_entry.py v114_patch.py pwa_patch.py
+          python -m py_compile app.py desktop_launcher.py coord_launcher.py cloud_entry.py v114_patch.py pwa_patch.py
 
-      - name: Build EXE
+      - name: Build EXEs
         run: |
           python -m PyInstaller --noconfirm --clean BingoComunidade.spec
+          python -m PyInstaller --noconfirm --clean BingoCoordenacao.spec
 
       - name: Prepare package
         shell: pwsh
         run: |
           @'
-          BINGO COMUNIDADE - EXECUTAVEL WINDOWS
+          BINGO COMUNIDADE V11.6 - REDE LOCAL
 
-          IMPORTANTE:
-          1. Este pacote NAO contem bingo.db.
-          2. Coloque "Bingo Comunidade.exe" na mesma pasta do SEU bingo.db oficial.
-          3. As 500 cartelas oficiais permanecem no bingo.db do seu computador.
-          4. Faca uma copia de seguranca do bingo.db antes da primeira execucao.
-          '@ | Set-Content -Encoding UTF8 "dist\LEIA_ANTES_DE_USAR.txt"
+          NOTEBOOK PRINCIPAL
+          1. Use "Bingo Comunidade.exe" no computador que possui o bingo.db oficial.
+          2. Este pacote NAO contem bingo.db.
+          3. O banco oficial continua somente no notebook principal.
+          4. Ao fechar a janela principal, o servidor continua ativo em segundo plano para Coordenacao, telao e celulares.
+          5. Para encerrar totalmente o servidor, execute "Bingo Comunidade.exe --central" e clique em Encerrar servidor.
+
+          NOTEBOOK DA COORDENACAO
+          1. Copie apenas "Bingo Comunidade - Coordenacao.exe" para o segundo notebook.
+          2. Ele NAO usa bingo.db local.
+          3. Os dois notebooks devem estar na mesma rede Wi-Fi/LAN.
+          4. O cliente procura automaticamente o notebook principal.
+          5. Se o Windows Firewall perguntar, permita acesso em redes PRIVADAS.
+
+          SEGURANCA
+          Faca backup do bingo.db oficial antes de atualizar o EXE do notebook principal.
+          '@ | Set-Content -Encoding UTF8 "dist\LEIA_REDE_LOCAL.txt"
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
-          name: Bingo-Comunidade-Windows
+          name: Bingo-Comunidade-V11-6-Rede-Local
           path: |
             dist/Bingo Comunidade.exe
-            dist/LEIA_ANTES_DE_USAR.txt
+            dist/Bingo Comunidade - Coordenacao.exe
+            dist/LEIA_REDE_LOCAL.txt
           if-no-files-found: error
           retention-days: 30
