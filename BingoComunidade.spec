@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_submodules
 
-hiddenimports = collect_submodules('qrcode') + collect_submodules('reportlab')
+hiddenimports = (
+    collect_submodules('qrcode')
+    + collect_submodules('reportlab')
+    + collect_submodules('webview')
+)
 
 a = Analysis(
     ['desktop_launcher.py'],
