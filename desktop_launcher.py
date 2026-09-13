@@ -82,25 +82,6 @@ def ip_rede_local():
             return '127.0.0.1'
 
 
-def abrir_janela_app(porta: int):
-    """Abre o Bingo como aplicativo Windows, sem barra/endereço do navegador."""
-    import webview
-
-    url = f'http://127.0.0.1:{porta}/'
-    webview.create_window(
-        'Bingo Comunidade',
-        url,
-        width=1380,
-        height=860,
-        min_size=(960, 640),
-        resizable=True,
-        fullscreen=False,
-        confirm_close=False,
-    )
-    # No Windows o pywebview usa preferencialmente o Microsoft Edge WebView2.
-    webview.start(debug=False)
-
-
 PORTA_EXISTENTE = porta_servidor_existente()
 PORTA = PORTA_EXISTENTE or porta_livre()
 os.environ['BINGO_PORT'] = str(PORTA)
@@ -119,6 +100,125 @@ class ServidorBingo(threading.Thread):
 
     def parar(self):
         self.httpd.shutdown()
+
+
+POPUP_SCRIPT = r"""
+(() => {
+  if (window.__bingoNativePopupsInstalled) return;
+  window.__bingoNativePopupsInstalled = true;
+
+  const abrirNativo = (url) => {
+    try {
+      if (!url) return false;
+      const absoluto = new URL(url, window.location.href);
+      if (absoluto.origin !== window.location.origin) return false;
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.abrir_janela_nativa) {
+        window.pywebview.api.abrir_janela_nativa(absoluto.href);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  };
+
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest && ev.target.closest('a[target="_blank"]');
+    if (!a) return;
+    if (abrirNativo(a.href)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+
+  const originalOpen = window.open;
+  window.open = function(url, target, features) {
+    if ((!target || target === '_blank') && abrirNativo(url)) return null;
+    return originalOpen.call(window, url, target, features);
+  };
+})();
+"""
+
+
+def titulo_para_url(url: str) -> str:
+    u = (url or '').lower()
+    if '/telao' in u:
+        return 'Bingo Comunidade — Telão'
+    if '/sorteio' in u:
+        return 'Bingo Comunidade — Sorteio'
+    return 'Bingo Comunidade'
+
+
+def tamanho_para_url(url: str):
+    u = (url or '').lower()
+    if '/telao' in u:
+        return 1500, 900, (1000, 650)
+    if '/sorteio' in u:
+        return 1450, 900, (1000, 680)
+    return 1380, 860, (960, 640)
+
+
+def instalar_interceptador_popup(janela):
+    def ao_carregar():
+        try:
+            janela.evaluate_js(POPUP_SCRIPT)
+        except Exception:
+            pass
+    try:
+        janela.events.loaded += ao_carregar
+    except Exception:
+        pass
+
+
+class DesktopApi:
+    def __init__(self, porta: int):
+        self.base_url = f'http://127.0.0.1:{porta}'
+
+    def abrir_janela_nativa(self, url: str):
+        import webview
+        try:
+            if not url:
+                return False
+            if url.startswith('/'):
+                url = self.base_url + url
+            if not url.startswith(self.base_url):
+                return False
+            largura, altura, minimo = tamanho_para_url(url)
+            janela = webview.create_window(
+                titulo_para_url(url),
+                url,
+                width=largura,
+                height=altura,
+                min_size=minimo,
+                resizable=True,
+                fullscreen=False,
+                confirm_close=False,
+                js_api=self,
+            )
+            instalar_interceptador_popup(janela)
+            return True
+        except Exception:
+            return False
+
+
+def abrir_janela_app(porta: int):
+    """Abre o Bingo como aplicativo Windows e mantém pop-ups locais em janelas nativas."""
+    import webview
+
+    api = DesktopApi(porta)
+    url = f'http://127.0.0.1:{porta}/'
+    janela = webview.create_window(
+        'Bingo Comunidade',
+        url,
+        width=1380,
+        height=860,
+        min_size=(960, 640),
+        resizable=True,
+        fullscreen=False,
+        confirm_close=False,
+        js_api=api,
+    )
+    instalar_interceptador_popup(janela)
+    # No Windows o pywebview usa preferencialmente o Microsoft Edge WebView2.
+    webview.start(debug=False)
 
 
 class JanelaCentral(tk.Tk):
@@ -194,7 +294,6 @@ def avisar_banco_novo():
 
 
 def main():
-    # Central administrativa opcional: Bingo Comunidade.exe --central
     if '--central' in sys.argv:
         servidor = None
         if PORTA_EXISTENTE is None:
@@ -206,7 +305,6 @@ def main():
         JanelaCentral(servidor).mainloop()
         return
 
-    # Se já existe um servidor do Bingo rodando, apenas abre uma nova janela nativa.
     if PORTA_EXISTENTE is not None:
         try:
             abrir_janela_app(PORTA_EXISTENTE)
@@ -223,7 +321,6 @@ def main():
     except Exception as exc:
         mostrar_erro(str(exc))
     finally:
-        # Fechar a janela principal encerra o servidor local, como um programa normal.
         if servidor:
             try:
                 servidor.parar()
