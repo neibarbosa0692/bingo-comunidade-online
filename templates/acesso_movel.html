@@ -23,8 +23,12 @@
   {% if not online_url %}<div class="flash warning">Configure primeiro o endereço do servidor online no menu <b>Online / Offline</b>. Enquanto isso, os códigos podem ser usados apenas na rede local.</div>{% endif %}
   <div class="seller-mobile-grid">
     {% for v in vendedores %}
-    <div class="seller-mobile-card"><img src="{{ url_for('vendedor_acesso_qr', vendedor_id=v.id) }}" alt="QR {{ v.nome }}"><div><strong>{{ v.nome }}</strong><span>{{ v.telefone or 'Sem telefone' }}</span><small>Código de acesso: <b class="access-code">{{ v.codigo_acesso }}</b></small><small>Entregue este QR/código somente ao vendedor.</small></div></div>
+    {% set vendedor_link = (online_url or base_url) ~ '/mobile/vendedor/' ~ v.id ~ '?token=' ~ (v.acesso_token or '') %}
+    <div class="seller-mobile-card"><img src="{{ url_for('vendedor_acesso_qr', vendedor_id=v.id) }}" alt="QR {{ v.nome }}"><div style="min-width:0"><strong>{{ v.nome }}</strong><span>{{ v.telefone or 'Sem telefone' }}</span><small>Código de acesso: <b class="access-code">{{ v.codigo_acesso }}</b></small><div style="display:flex;gap:8px;align-items:center;margin-top:8px;max-width:100%"><input id="link-vendedor-{{ v.id }}" value="{{ vendedor_link }}" readonly style="min-width:0;flex:1;padding:8px 10px;border:1px solid #dfe4ee;border-radius:8px;font-size:12px;background:#f8fafc;color:#4b5875"><button type="button" class="btn btn-ghost" style="padding:8px 10px;white-space:nowrap" onclick="copiarLinkVendedor({{ v.id }}, this)">Copiar</button></div></div></div>
     {% else %}<p class="muted">Cadastre vendedores primeiro.</p>{% endfor %}
   </div>
 </div>
+<script>
+async function copiarLinkVendedor(id,botao){const campo=document.getElementById('link-vendedor-'+id);if(!campo)return;try{await navigator.clipboard.writeText(campo.value)}catch(e){campo.focus();campo.select();document.execCommand('copy');campo.setSelectionRange(0,0)}const anterior=botao.textContent;botao.textContent='Copiado!';setTimeout(()=>botao.textContent=anterior,1800)}
+</script>
 {% endblock %}
