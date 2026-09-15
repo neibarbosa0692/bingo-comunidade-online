@@ -49,6 +49,10 @@ def install(bingo):
                         html = html.replace('</head>', head + '</head>', 1)
                     if '/static/pwa.js' not in html and '</body>' in html:
                         html = html.replace('</body>', '<script src="/static/pwa.js" defer></script></body>', 1)
+                    # Compatibilidade com o telão já existente: amplia de 12 para 40 segundos
+                    # o tempo de permanência dos detalhes da cartela vencedora.
+                    if 'winnerOverlay' in html:
+                        html = html.replace('},12000)}', '},40000)}')
                     response.set_data(html)
                     response.headers['Content-Length'] = len(response.get_data())
                 except Exception:
