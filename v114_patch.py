@@ -114,3 +114,11 @@ def install(bingo):
             return jsonify(dados)
 
         bingo.app.view_functions['api_estado_sorteio'] = api_estado_sorteio_v114
+
+    # V11.7: pós-bingo é instalado de forma aditiva. O módulo cria apenas uma tabela
+    # de histórico e novas rotas; a tabela cartelas e as grades já impressas não são alteradas.
+    try:
+        import post_bingo_patch
+        post_bingo_patch.install(bingo)
+    except Exception as exc:
+        print(f'[Bingo Comunidade] Pós-bingo não instalado: {exc}')
