@@ -808,6 +808,7 @@ def rodada_ativa(conn, evento_id):
 def padrao_label(padrao):
     return {
         'linha': '1 linha horizontal',
+        'horizontal_vertical': 'Horizontal ou vertical',
         'duas_linhas': '2 linhas horizontais',
         'quatro_cantos': '4 cantos',
         'x': 'X completo',
@@ -825,6 +826,10 @@ def cartela_atende_padrao(grade, sorteados, padrao):
     linhas_completas = sum(1 for row in linhas_h if all(_marcado(n, sorteados) for n in row))
     if padrao == 'linha':
         return linhas_completas >= 1
+    if padrao == 'horizontal_vertical':
+        horizontal = linhas_completas >= 1
+        vertical = any(all(_marcado(grade[r][c], sorteados) for r in range(5)) for c in range(5))
+        return horizontal or vertical
     if padrao == 'duas_linhas':
         return linhas_completas >= 2
     if padrao == 'quatro_cantos':
@@ -851,6 +856,9 @@ def cartela_proximidade_padrao(grade, sorteados, padrao):
 
     if padrao == 'linha':
         candidatos = [faltantes_valores(row) for row in grade]
+    elif padrao == 'horizontal_vertical':
+        candidatos = [faltantes_valores(row) for row in grade]
+        candidatos += [faltantes_valores([grade[r][c] for r in range(5)]) for c in range(5)]
     elif padrao == 'duas_linhas':
         faltas_linhas = [set(faltantes_valores(row)) for row in grade]
         candidatos = []
