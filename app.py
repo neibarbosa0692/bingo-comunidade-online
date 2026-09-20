@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import secrets
 import os
+import sys
 import uuid
 import time
 import threading
@@ -55,7 +56,12 @@ CARD_BLUE = HexColor('#157AA6')
 CARD_PALE = HexColor('#FBF8F0')
 COMMUNITY_NAME = 'Comunidade Jesus Misericordioso'
 LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
-CARD_TEMPLATE_PATH = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
+# No Windows compilado, permite atualizar a arte da cartela sem tocar no banco de dados.
+# Se existir "cartela_template_oficial.png" ao lado do EXE, ela tem prioridade.
+# Caso contrário, usa o template incorporado ao aplicativo.
+_embedded_card_template = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
+_external_card_template = Path(sys.executable).with_name('cartela_template_oficial.png') if getattr(sys, 'frozen', False) else None
+CARD_TEMPLATE_PATH = _external_card_template if (_external_card_template and _external_card_template.exists()) else _embedded_card_template
 SYSTEM_BUILD = 'V11.11-LIMITE-TOTAL-ACERTOS-2026-09-08'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
