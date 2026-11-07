@@ -1243,9 +1243,9 @@ def _v5_auth():
         else:
             session.pop('usuario_id', None)
 
-    if BINGO_MODE=='cloud' and request.endpoint in {'login','logout'}:
+    if BINGO_MODE=='cloud' and not BINGO_ONLINE_ADMIN and request.endpoint in {'login','logout'}:
         return redirect(url_for('mobile_home'))
-    if BINGO_MODE=='cloud' and request.endpoint not in PUBLIC_ENDPOINTS and request.endpoint is not None:
+    if BINGO_MODE=='cloud' and not BINGO_ONLINE_ADMIN and request.endpoint not in PUBLIC_ENDPOINTS and request.endpoint is not None:
         return jsonify({'ok':False,'message':'Painel administrativo desativado no nó online. Use o computador local.'}),404
     if request.endpoint in PUBLIC_ENDPOINTS or request.endpoint is None:
         return None
