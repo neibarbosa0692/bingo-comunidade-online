@@ -449,9 +449,8 @@ def criar_rodadas_padrao(conn, evento_id):
         conn.executemany(
             "INSERT INTO rodadas (evento_id,nome,padrao,premio,ordem,status) VALUES (?,?,?,?,?,?)",
             [
-                (evento_id, '1ª premiação — 1 linha', 'linha', 0, 1, 'ativa'),
-                (evento_id, '2ª premiação — 2 linhas', 'duas_linhas', 0, 2, 'pendente'),
-                (evento_id, 'Prêmio principal — Cartela cheia', 'cartela_cheia', 0, 3, 'pendente'),
+                (evento_id, '1ª premiação — Horizontal e vertical', 'horizontal_vertical', 0, 1, 'ativa'),
+                (evento_id, 'Prêmio principal — Cartela cheia', 'cartela_cheia', 0, 2, 'pendente'),
             ]
         )
 
@@ -807,8 +806,8 @@ def rodada_ativa(conn, evento_id):
 
 def padrao_label(padrao):
     return {
-        'linha': '1 linha horizontal',
-        'horizontal_vertical': 'Horizontal ou vertical',
+        'linha': 'Horizontal e vertical',
+        'horizontal_vertical': 'Horizontal e vertical',
         'duas_linhas': '2 linhas horizontais',
         'quatro_cantos': '4 cantos',
         'x': 'X completo',
@@ -824,9 +823,7 @@ def cartela_atende_padrao(grade, sorteados, padrao):
     sorteados = set(sorteados)
     linhas_h = [row for row in grade]
     linhas_completas = sum(1 for row in linhas_h if all(_marcado(n, sorteados) for n in row))
-    if padrao == 'linha':
-        return linhas_completas >= 1
-    if padrao == 'horizontal_vertical':
+    if padrao in ('horizontal_vertical', 'linha'):
         horizontal = linhas_completas >= 1
         vertical = any(all(_marcado(grade[r][c], sorteados) for r in range(5)) for c in range(5))
         return horizontal or vertical
@@ -854,9 +851,7 @@ def cartela_proximidade_padrao(grade, sorteados, padrao):
     def faltantes_valores(valores):
         return sorted({n for n in valores if n != 0 and n not in sorteados})
 
-    if padrao == 'linha':
-        candidatos = [faltantes_valores(row) for row in grade]
-    elif padrao == 'horizontal_vertical':
+    if padrao in ('horizontal_vertical', 'linha'):
         candidatos = [faltantes_valores(row) for row in grade]
         candidatos += [faltantes_valores([grade[r][c] for r in range(5)]) for c in range(5)]
     elif padrao == 'duas_linhas':
@@ -1845,6 +1840,18 @@ def distribuicao():
 @app.route('/vendas', methods=['GET','POST'])
 def vendas():
     conn=get_db(); evento=evento_ativo(conn)
+    busca_raw=request.args.get('buscar','').strip()
+    busca_numero=None
+    busca_resultado=None
+    if busca_raw:
+        try: busca_numero=int(busca_raw)
+        except ValueError: busca_numero=0
+        busca_resultado=conn.execute("""SELECT c.*,v.nome vendedor,
+            (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
+            (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo='venda' ORDER BY m2.id DESC LIMIT 1) origem,
+            (SELECT m3.criado_em FROM movimentacoes_vendas m3 WHERE m3.cartela_id=c.id AND m3.tipo='venda' ORDER BY m3.id DESC LIMIT 1) venda_registrada_em
+            FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id
+            WHERE c.evento_id=? AND c.numero=?""", (evento['id'],busca_numero)).fetchone()
     if request.method=='POST':
         if vendas_fechadas(evento):
             flash('As vendas estão encerradas para preparação do sorteio. Reabra-as em Sincronização se realmente precisar.','warning')
@@ -1879,7 +1886,7 @@ def vendas():
     historico=conn.execute("""SELECT m.*,v.nome vendedor,u.nome usuario_nome FROM movimentacoes_vendas m
         LEFT JOIN vendedores v ON v.id=m.vendedor_id LEFT JOIN usuarios u ON u.id=m.usuario_id
         WHERE m.evento_id=? ORDER BY m.id DESC LIMIT 40""", (evento['id'],)).fetchall()
-    conn.close(); return render_template('vendas.html', evento=evento, vendedores=vend, recentes=recentes, historico=historico, vendas_fechadas=vendas_fechadas(evento))
+    conn.close(); return render_template('vendas.html', evento=evento, vendedores=vend, recentes=recentes, historico=historico, vendas_fechadas=vendas_fechadas(evento), busca_raw=busca_raw, busca_numero=busca_numero, busca_resultado=busca_resultado)
 
 
 @app.route('/financeiro', methods=['GET','POST'])
@@ -2022,7 +2029,9 @@ def rodadas():
     conn=get_db(); evento=evento_ativo(conn)
     if request.method=='POST':
         nome=request.form.get('nome','').strip()
-        padrao=request.form.get('padrao','cartela_cheia')
+        padrao=request.form.get('padrao','horizontal_vertical')
+        if padrao == 'linha':
+            padrao = 'horizontal_vertical'
         try: premio=float(request.form.get('premio','0').replace(',','.'))
         except ValueError: premio=0
         if nome:
