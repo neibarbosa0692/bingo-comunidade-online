@@ -65,6 +65,7 @@ CARD_TEMPLATE_PATH = _external_card_template if (_external_card_template and _ex
 SYSTEM_BUILD = 'V11.11-LIMITE-TOTAL-ACERTOS-2026-09-08'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
+BINGO_ONLINE_ADMIN = os.environ.get('BINGO_ONLINE_ADMIN', '0').strip().lower() in {'1', 'true', 'yes', 'on'}
 CLOUD_SYNC_TOKEN = os.environ.get('BINGO_SYNC_TOKEN', '').strip()
 SYNC_WORKER_STARTED = False
 DEFAULT_CARD_TIME = 'Após a Santa Missa das 18h'
