@@ -1,6 +1,7 @@
 """Ponto de entrada para hospedagem do servidor ONLINE da V11."""
 import os
 os.environ.setdefault('BINGO_MODE','cloud')
+os.environ.setdefault('BINGO_ONLINE_ADMIN','1')
 if os.environ.get('PORT') and not os.environ.get('BINGO_PORT'):
     os.environ['BINGO_PORT']=os.environ['PORT']
 
