@@ -1901,7 +1901,8 @@ def vendas():
                 agora=iso_brasilia(); uid=usuario_atual_id(); suid=_novo_sync_uuid()
                 status_novo='vendida' if request.form.get('status_venda')=='vendida' else 'reservada'
                 pagamento_novo=pagamento if status_novo=='vendida' else None
-                tipo_novo='venda' if status_novo=='vendida' else 'reserva'\n                conn.execute("""UPDATE cartelas SET status=?, comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
+                tipo_novo='venda' if status_novo=='vendida' else 'reserva'
+                conn.execute("""UPDATE cartelas SET status=?, comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
                              (status_novo, comprador, telefone, pagamento_novo, vendedor_id, agora, uid, card['id']))
                 conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (evento['id'],card['id'],numero,tipo_novo,comprador,telefone,pagamento_novo,vendedor_id,uid,agora,'painel',suid,0 if BINGO_MODE=='local' else 1))
