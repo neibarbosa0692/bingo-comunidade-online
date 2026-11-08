@@ -1899,13 +1899,15 @@ def vendas():
             else:
                 vendedor_id=vendedor_form if vendedor_form is not None else card['vendedor_id']
                 agora=iso_brasilia(); uid=usuario_atual_id(); suid=_novo_sync_uuid()
-                status_novo='vendida' if request.form.get('status_venda')=='vendida' else 'reservada'\n                pagamento_novo=pagamento if status_novo=='vendida' else None\n                tipo_novo='venda' if status_novo=='vendida' else 'reserva'\n                conn.execute("""UPDATE cartelas SET status=?, comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
+                status_novo='vendida' if request.form.get('status_venda')=='vendida' else 'reservada'
+                pagamento_novo=pagamento if status_novo=='vendida' else None
+                tipo_novo='venda' if status_novo=='vendida' else 'reserva'\n                conn.execute("""UPDATE cartelas SET status=?, comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
                              (status_novo, comprador, telefone, pagamento_novo, vendedor_id, agora, uid, card['id']))
                 conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (evento['id'],card['id'],numero,tipo_novo,comprador,telefone,pagamento_novo,vendedor_id,uid,agora,'painel',suid,0 if BINGO_MODE=='local' else 1))
                 if BINGO_MODE=='cloud':
                     payload={'sync_uuid':suid,'evento_id':evento['id'],'numero':numero,'tipo':tipo_novo,'comprador':comprador,'telefone':telefone,'pagamento':pagamento_novo,'vendedor_id':vendedor_id,'criado_em':agora}
-                    _registrar_evento_sync(conn,suid,'venda',evento['id'],numero,payload,'nuvem')
+                    _registrar_evento_sync(conn,suid,tipo_novo,evento['id'],numero,payload,'nuvem')
                 conn.commit(); flash(f'Cartela {numero:04d} marcada como {"vendida e paga" if status_novo=="vendida" else "reservada (aguardando pagamento)"}.', 'success')
     vend=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
     recentes=conn.execute("""SELECT c.numero,c.status,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
