@@ -13,6 +13,12 @@
 <b>{{ '%04d'|format(c.numero) }}</b>
 <span>{% if c.status=='reservada' %}🟡 Reservada{% else %}✓ Paga / Vendida{% endif %}</span>
 {% if c.comprador %}<small>{{ c.comprador }}</small>{% endif %}
+{% if c.status=='reservada' and not vendas_fechadas %}
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:8px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="pagar"><select name="pagamento" required><option value="">Pagamento...</option><option>PIX</option><option>Dinheiro</option><option>Outros</option></select><button class="btn btn-primary btn-full">💰 Marcar como paga</button></form>
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:6px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="cancelar"><button class="btn btn-full">↩ Cancelar reserva</button></form>
+{% elif c.status=='vendida' and not vendas_fechadas %}
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:8px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="reservar_vendida"><button class="btn btn-full">🟡 Voltar para reserva</button></form>
+{% endif %}
 </a>
 {% endfor %}
 </div>
