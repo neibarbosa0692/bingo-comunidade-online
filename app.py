@@ -62,7 +62,7 @@ LOGO_PATH = Path(__file__).with_name('static') / 'logo_comunidade.png'
 _embedded_card_template = Path(__file__).with_name('static') / 'cartela_template_oficial.png'
 _external_card_template = Path(sys.executable).with_name('cartela_template_oficial.png') if getattr(sys, 'frozen', False) else None
 CARD_TEMPLATE_PATH = _external_card_template if (_external_card_template and _external_card_template.exists()) else _embedded_card_template
-SYSTEM_BUILD = 'V11.11-LIMITE-TOTAL-ACERTOS-2026-09-08'
+SYSTEM_BUILD = 'V11.12-RESERVA-PAGAMENTO-2026-11-08'
 SYSTEM_PORT = int(os.environ.get('BINGO_PORT', '8765'))
 BINGO_MODE = os.environ.get('BINGO_MODE', 'local').strip().lower()
 BINGO_ONLINE_ADMIN = os.environ.get('BINGO_ONLINE_ADMIN', '0').strip().lower() in {'1', 'true', 'yes', 'on'}
@@ -623,7 +623,8 @@ def _cloud_aplicar_snapshot(snapshot):
         if numero is None: continue
         atual=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?",(eid,numero)).fetchone()
         if atual:
-            manter_venda = atual['status']=='vendida' and c.get('status')!='vendida'
+            manter_venda = ((atual['status']=='vendida' and c.get('status')!='vendida') or
+                            (atual['status']=='reservada' and c.get('status')=='disponivel'))
             if manter_venda:
                 conn.execute("UPDATE cartelas SET numeros=?,vendedor_id=?,lote_id=?,impressa_em=?,inutilizada_em=?,inutilizada_motivo=? WHERE id=?",
                              (c.get('numeros'),c.get('vendedor_id'),c.get('lote_id'),c.get('impressa_em'),c.get('inutilizada_em'),c.get('inutilizada_motivo'),atual['id']))
@@ -667,27 +668,55 @@ def _aplicar_movimento_recebido(conn, mov, origem='remoto'):
     if not card:
         return False, f'Cartela {numero:04d} não existe.'
     agora=mov.get('criado_em') or iso_brasilia()
+    comprador=mov.get('comprador') if mov.get('comprador') is not None else card['comprador']
+    telefone=mov.get('telefone') if mov.get('telefone') is not None else card['telefone']
+    vendedor_id=mov.get('vendedor_id') or card['vendedor_id']
+    pagamento=mov.get('pagamento') if mov.get('pagamento') is not None else card['pagamento']
+
     if tipo=='venda':
         if card['status']=='vendida':
-            # Venda idêntica é idempotente; venda diferente vira conflito.
-            mesmo=(str(card['comprador'] or '')==str(mov.get('comprador') or '') and str(card['vendedor_id'] or '')==str(mov.get('vendedor_id') or ''))
+            mesmo=(str(card['comprador'] or '')==str(comprador or '') and str(card['vendedor_id'] or '')==str(vendedor_id or ''))
             if not mesmo:
                 return False, f'CONFLITO: cartela {numero:04d} já vendida.'
-        else:
+        elif card['status'] in ('reservada','disponivel'):
             conn.execute("""UPDATE cartelas SET status='vendida',comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
-                         (mov.get('comprador'),mov.get('telefone'),mov.get('pagamento'),mov.get('vendedor_id') or card['vendedor_id'],agora,card['id']))
+                         (comprador,telefone,pagamento,vendedor_id,agora,card['id']))
+        else:
+            return False, f'Cartela {numero:04d} não pode ser vendida no estado atual.'
+    elif tipo=='reserva':
+        if card['status']=='vendida':
+            mesmo=(str(card['comprador'] or '')==str(comprador or '') and str(card['vendedor_id'] or '')==str(vendedor_id or ''))
+            if not mesmo:
+                return False, f'CONFLITO: cartela {numero:04d} já vendida para outro comprador.'
+        elif card['status'] in ('disponivel','reservada'):
+            conn.execute("""UPDATE cartelas SET status='reservada',comprador=?,telefone=?,pagamento=NULL,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                         (comprador,telefone,vendedor_id,agora,card['id']))
+        else:
+            return False, f'Cartela {numero:04d} não pode ser reservada no estado atual.'
+    elif tipo=='pagamento_confirmado':
+        if card['status']=='vendida':
+            mesmo=(str(card['comprador'] or '')==str(comprador or '') and str(card['vendedor_id'] or '')==str(vendedor_id or ''))
+            if not mesmo:
+                return False, f'CONFLITO: cartela {numero:04d} já vendida para outro comprador.'
+        elif card['status']=='reservada':
+            conn.execute("""UPDATE cartelas SET status='vendida',comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                         (comprador,telefone,pagamento,vendedor_id,agora,card['id']))
+        else:
+            return False, f'Cartela {numero:04d} não está reservada para confirmação do pagamento.'
     elif tipo=='cancelamento':
+        if card['status'] not in ('vendida','reservada'):
+            return False, f'Cartela {numero:04d} não possui uma venda/reserva ativa.'
         conn.execute("UPDATE cartelas SET status='disponivel',comprador=NULL,telefone=NULL,pagamento=NULL,vendido_em=NULL,vendido_por_usuario_id=NULL WHERE id=?",(card['id'],))
     else:
         return False, f'Tipo não suportado: {tipo}'
+
     existente=conn.execute("SELECT id FROM movimentacoes_vendas WHERE sync_uuid=?",(uid,)).fetchone()
     if not existente:
         conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,motivo,criado_em,origem,sync_uuid,sync_enviado)
                      VALUES (?,?,?,?,?,?,?,?,NULL,?,?,?,?,1)""",
-                     (eid,card['id'],numero,tipo,mov.get('comprador'),mov.get('telefone'),mov.get('pagamento'),mov.get('vendedor_id'),mov.get('motivo'),agora,origem,uid))
+                     (eid,card['id'],numero,tipo,comprador,telefone,pagamento,vendedor_id,mov.get('motivo'),agora,origem,uid))
     conn.execute("INSERT OR IGNORE INTO sync_recebidos (uuid,origem,recebido_em) VALUES (?,?,?)",(uid,origem,iso_brasilia()))
     return True, 'ok'
-
 
 def _sync_push_movimentos(remote, token):
     conn=get_db()
@@ -1870,14 +1899,14 @@ def vendas():
             else:
                 vendedor_id=vendedor_form if vendedor_form is not None else card['vendedor_id']
                 agora=iso_brasilia(); uid=usuario_atual_id(); suid=_novo_sync_uuid()
-                conn.execute("""UPDATE cartelas SET status='vendida', comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
-                             (comprador, telefone, pagamento, vendedor_id, agora, uid, card['id']))
+                status_novo='vendida' if request.form.get('status_venda')=='vendida' else 'reservada'\n                pagamento_novo=pagamento if status_novo=='vendida' else None\n                tipo_novo='venda' if status_novo=='vendida' else 'reserva'\n                conn.execute("""UPDATE cartelas SET status=?, comprador=?, telefone=?, pagamento=?, vendedor_id=?, vendido_em=?, vendido_por_usuario_id=? WHERE id=?""",
+                             (status_novo, comprador, telefone, pagamento_novo, vendedor_id, agora, uid, card['id']))
                 conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (evento['id'],card['id'],numero,'venda',comprador,telefone,pagamento,vendedor_id,uid,agora,'painel',suid,0 if BINGO_MODE=='local' else 1))
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (evento['id'],card['id'],numero,tipo_novo,comprador,telefone,pagamento_novo,vendedor_id,uid,agora,'painel',suid,0 if BINGO_MODE=='local' else 1))
                 if BINGO_MODE=='cloud':
-                    payload={'sync_uuid':suid,'evento_id':evento['id'],'numero':numero,'tipo':'venda','comprador':comprador,'telefone':telefone,'pagamento':pagamento,'vendedor_id':vendedor_id,'criado_em':agora}
+                    payload={'sync_uuid':suid,'evento_id':evento['id'],'numero':numero,'tipo':tipo_novo,'comprador':comprador,'telefone':telefone,'pagamento':pagamento_novo,'vendedor_id':vendedor_id,'criado_em':agora}
                     _registrar_evento_sync(conn,suid,'venda',evento['id'],numero,payload,'nuvem')
-                conn.commit(); flash(f'Cartela {numero:04d} marcada como vendida.', 'success')
+                conn.commit(); flash(f'Cartela {numero:04d} marcada como {"vendida e paga" if status_novo=="vendida" else "reservada (aguardando pagamento)"}.', 'success')
     vend=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
     recentes=conn.execute("""SELECT c.numero,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
         (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
@@ -2096,20 +2125,26 @@ def mobile_home():
     vendedor=None
     if session.get('vendedor_id'):
         vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1", (session['vendedor_id'],)).fetchone()
-    vendidas=0; total_cartelas=0; restantes=0; minhas=[]
+    vendidas=0; reservadas=0; total_cartelas=0; restantes=0; minhas=[]; recebido=0.0; pendente=0.0; previsto=0.0
     if vendedor:
         resumo=conn.execute("""SELECT
             COUNT(*) total,
             SUM(CASE WHEN status='vendida' THEN 1 ELSE 0 END) vendidas,
+            SUM(CASE WHEN status='reservada' THEN 1 ELSE 0 END) reservadas,
             SUM(CASE WHEN status='disponivel' THEN 1 ELSE 0 END) restantes
             FROM cartelas
             WHERE evento_id=? AND vendedor_id=? AND status<>'inutilizada'""",
             (evento['id'],vendedor['id'])).fetchone()
-        total_cartelas=resumo['total'] or 0
-        vendidas=resumo['vendidas'] or 0
-        restantes=resumo['restantes'] or 0
+        total_cartelas=int(resumo['total'] or 0)
+        vendidas=int(resumo['vendidas'] or 0)
+        reservadas=int(resumo['reservadas'] or 0)
+        restantes=int(resumo['restantes'] or 0)
+        valor=float(evento['valor_cartela'] or 0)
+        recebido=vendidas*valor; pendente=reservadas*valor; previsto=(vendidas+reservadas)*valor
         minhas=conn.execute("SELECT numero,status,comprador FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status<>'inutilizada' ORDER BY numero LIMIT 500",(evento['id'],vendedor['id'])).fetchall()
-    conn.close(); return render_template('mobile_home.html', evento=evento, vendedores=vendedores, vendedor=vendedor, vendidas=vendidas, total_cartelas=total_cartelas, restantes=restantes, minhas=minhas, mode=BINGO_MODE, vendas_fechadas=vendas_fechadas(evento))
+    conn.close(); return render_template('mobile_home.html', evento=evento, vendedores=vendedores, vendedor=vendedor, vendidas=vendidas, reservadas=reservadas,
+                                         total_cartelas=total_cartelas, restantes=restantes, recebido=recebido, pendente=pendente, previsto=previsto,
+                                         minhas=minhas, mode=BINGO_MODE, vendas_fechadas=vendas_fechadas(evento))
 
 
 @app.route('/mobile/vendedor/<int:vendedor_id>')
@@ -2158,6 +2193,100 @@ def mobile_abrir_cartela():
     return redirect(url_for('mobile_cartela', evento_id=evento['id'], numero=numero))
 
 
+def _registrar_movimento_status(conn, card, evento_id, tipo, vendedor_id, comprador=None, telefone=None, pagamento=None, motivo='', origem=None):
+    agora=iso_brasilia(); suid=_novo_sync_uuid()
+    origem=origem or ('nuvem' if BINGO_MODE=='cloud' else 'celular')
+    if tipo=='reserva':
+        conn.execute("""UPDATE cartelas SET status='reservada',comprador=?,telefone=?,pagamento=NULL,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                     (comprador,telefone,vendedor_id,agora,card['id']))
+    elif tipo=='pagamento_confirmado':
+        conn.execute("""UPDATE cartelas SET status='vendida',comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                     (comprador,telefone,pagamento,vendedor_id,agora,card['id']))
+    elif tipo=='cancelamento':
+        conn.execute("""UPDATE cartelas SET status='disponivel',comprador=NULL,telefone=NULL,pagamento=NULL,vendido_em=NULL,vendido_por_usuario_id=NULL WHERE id=?""",
+                     (card['id'],))
+    else:
+        raise ValueError('Tipo de movimento inválido.')
+    conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,motivo,criado_em,origem,sync_uuid,sync_enviado)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (evento_id,card['id'],card['numero'],tipo,comprador,telefone,pagamento,vendedor_id,usuario_atual_id(),motivo,agora,origem,suid,1 if BINGO_MODE=='cloud' else 0))
+    payload={'sync_uuid':suid,'evento_id':evento_id,'numero':card['numero'],'tipo':tipo,'comprador':comprador,'telefone':telefone,'pagamento':pagamento,
+             'vendedor_id':vendedor_id,'motivo':motivo,'criado_em':agora,'origem':origem}
+    if BINGO_MODE=='cloud':
+        _registrar_evento_sync(conn,suid,tipo,evento_id,card['numero'],payload,'nuvem')
+        conn.execute("INSERT OR IGNORE INTO sync_recebidos (uuid,origem,recebido_em) VALUES (?,?,?)",(suid,'nuvem',agora))
+    return suid
+
+@app.route('/mobile/vendas')
+def mobile_vendas():
+    conn=get_db(); evento=evento_ativo(conn)
+    vendedor=None
+    if session.get('vendedor_id'):
+        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1",(session['vendedor_id'],)).fetchone()
+    if not vendedor:
+        conn.close(); return redirect(url_for('mobile_home'))
+    resumo=conn.execute("""SELECT
+        COUNT(*) total,
+        SUM(CASE WHEN status='vendida' THEN 1 ELSE 0 END) vendidas,
+        SUM(CASE WHEN status='reservada' THEN 1 ELSE 0 END) reservadas,
+        SUM(CASE WHEN status='disponivel' THEN 1 ELSE 0 END) restantes
+        FROM cartelas WHERE evento_id=? AND vendedor_id=? AND status<>'inutilizada'""",
+        (evento['id'],vendedor['id'])).fetchone()
+    valor=float(evento['valor_cartela'] or 0)
+    vendas=conn.execute("""SELECT c.*, v.nome vendedor
+        FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id
+        WHERE c.evento_id=? AND c.vendedor_id=? AND c.status IN ('vendida','reservada')
+        ORDER BY CASE WHEN c.status='reservada' THEN 0 ELSE 1 END, c.numero""",
+        (evento['id'],vendedor['id'])).fetchall()
+    dados={
+        'total':int(resumo['total'] or 0),
+        'vendidas':int(resumo['vendidas'] or 0),
+        'reservadas':int(resumo['reservadas'] or 0),
+        'restantes':int(resumo['restantes'] or 0),
+        'recebido':float(resumo['vendidas'] or 0)*valor,
+        'pendente':float(resumo['reservadas'] or 0)*valor,
+        'previsto':float((resumo['vendidas'] or 0)+(resumo['reservadas'] or 0))*valor,
+    }
+    conn.close()
+    return render_template('mobile_vendas.html',evento=evento,vendedor=vendedor,vendas=vendas,dados=dados,valor_cartela=valor,mode=BINGO_MODE,vendas_fechadas=vendas_fechadas(evento))
+
+@app.route('/mobile/vendas/<int:numero>/acao', methods=['POST'])
+def mobile_venda_acao(numero):
+    conn=get_db(); evento=evento_ativo(conn)
+    vendedor=None
+    if session.get('vendedor_id'):
+        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1",(session['vendedor_id'],)).fetchone()
+    card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?",(evento['id'],numero)).fetchone()
+    if not vendedor or not card or card['vendedor_id'] != vendedor['id']:
+        conn.close(); flash('Cartela não encontrada ou fora do seu lote.','danger'); return redirect(url_for('mobile_vendas'))
+    if vendas_fechadas(evento):
+        conn.close(); flash('As vendas estão encerradas para preparação do sorteio.','warning'); return redirect(url_for('mobile_vendas'))
+    acao=request.form.get('acao','')
+    try:
+        if acao=='reservar' and card['status']=='disponivel':
+            comprador=request.form.get('comprador','').strip()
+            telefone=request.form.get('telefone','').strip()
+            _registrar_movimento_status(conn,card,evento['id'],'reserva',vendedor['id'],comprador,telefone,None)
+            conn.commit(); flash(f'Cartela {numero:04d} reservada. Ela ainda não participa do sorteio.','success')
+        elif acao=='pagar' and card['status']=='reservada':
+            pagamento=normalizar_forma_pagamento(request.form.get('pagamento',''))
+            if pagamento=='Não informado':
+                flash('Informe a forma de pagamento para confirmar o recebimento.','warning')
+            else:
+                _registrar_movimento_status(conn,card,evento['id'],'pagamento_confirmado',vendedor['id'],card['comprador'],card['telefone'],pagamento)
+                conn.commit(); flash(f'Pagamento da cartela {numero:04d} confirmado. Agora ela participa do sorteio.','success')
+        elif acao=='reservar_vendida' and card['status']=='vendida':
+            _registrar_movimento_status(conn,card,evento['id'],'reserva',vendedor['id'],card['comprador'],card['telefone'],None,'Venda convertida em reserva para aguardar pagamento.')
+            conn.commit(); flash(f'Cartela {numero:04d} voltou para reserva. Ela não participa do sorteio até o pagamento.','success')
+        elif acao=='cancelar' and card['status'] in ('vendida','reservada'):
+            _registrar_movimento_status(conn,card,evento['id'],'cancelamento',vendedor['id'],card['comprador'],card['telefone'],card['pagamento'],'Cancelamento/estorno pelo vendedor.')
+            conn.commit(); flash(f'Cartela {numero:04d} cancelada e liberada novamente.','success')
+        else:
+            flash('Ação não permitida para o estado atual da cartela.','warning')
+    except Exception as exc:
+        conn.rollback(); flash(f'Não foi possível atualizar a cartela: {exc}','danger')
+    conn.close(); return redirect(url_for('mobile_vendas'))
+
 @app.route('/m/<int:evento_id>/<int:numero>', methods=['GET','POST'])
 def mobile_cartela(evento_id, numero):
     conn=get_db(); evento=conn.execute("SELECT * FROM eventos WHERE id=?", (evento_id,)).fetchone()
@@ -2169,35 +2298,41 @@ def mobile_cartela(evento_id, numero):
         conn.close(); return render_template('mobile_erro.html', titulo='Cartela não encontrada', mensagem=f'Cartela {numero:04d} não existe neste evento.'),404
     vendedor=None
     if session.get('vendedor_id'):
-        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND online_ativo=1", (session['vendedor_id'],)).fetchone()
+        vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1", (session['vendedor_id'],)).fetchone()
     if request.method=='POST':
         if not evento['ativo']:
-            flash('Este bingo não é mais o evento ativo e não aceita novas vendas.','warning')
+            flash('Este bingo não é mais o evento ativo e não aceita novas movimentações.','warning')
         elif vendas_fechadas(evento):
             flash('As vendas deste bingo já foram encerradas para preparação do sorteio.','warning')
         elif not vendedor:
-            flash('Identifique o vendedor antes de registrar uma venda.','danger')
+            flash('Identifique o vendedor antes de registrar uma movimentação.','danger')
         elif card['vendedor_id'] != vendedor['id']:
-            flash('Esta cartela não pertence ao seu lote. Para evitar venda duplicada, somente o vendedor responsável pode dar baixa nela.','danger')
-        elif card['status']=='vendida':
-            flash('Esta cartela já está marcada como vendida.','warning')
-        elif card['status']!='disponivel':
-            flash('Esta cartela não está disponível para venda.','warning')
+            flash('Esta cartela não pertence ao seu lote. Para evitar venda duplicada, somente o vendedor responsável pode alterá-la.','danger')
         else:
-            comprador=request.form.get('comprador','').strip(); telefone=request.form.get('telefone','').strip(); pagamento=request.form.get('pagamento','').strip()
-            vendedor_id=vendedor['id']; agora=iso_brasilia(); suid=_novo_sync_uuid()
-            conn.execute("UPDATE cartelas SET status='vendida',comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?",
-                         (comprador,telefone,pagamento,vendedor_id,agora,card['id']))
-            cur=conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,criado_em,origem,sync_uuid,sync_enviado)
-                VALUES (?,?,?,?,?,?,?,?,NULL,?,?,?,?)""",
-                (evento_id,card['id'],numero,'venda',comprador,telefone,pagamento,vendedor_id,agora,'nuvem' if BINGO_MODE=='cloud' else 'celular',suid,1 if BINGO_MODE=='cloud' else 0))
-            payload={'sync_uuid':suid,'evento_id':evento_id,'numero':numero,'tipo':'venda','comprador':comprador,'telefone':telefone,'pagamento':pagamento,
-                     'vendedor_id':vendedor_id,'criado_em':agora,'origem':'nuvem' if BINGO_MODE=='cloud' else 'celular'}
-            if BINGO_MODE=='cloud':
-                _registrar_evento_sync(conn,suid,'venda',evento_id,numero,payload,'nuvem')
-                conn.execute("INSERT OR IGNORE INTO sync_recebidos (uuid,origem,recebido_em) VALUES (?,?,?)",(suid,'nuvem',agora))
-            conn.commit(); flash(f'Cartela {numero:04d} vendida com sucesso.','success')
-            card=conn.execute("""SELECT c.*,v.nome vendedor FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id WHERE c.id=?""", (card['id'],)).fetchone()
+            acao=request.form.get('acao','')
+            try:
+                if acao=='reservar' and card['status']=='disponivel':
+                    comprador=request.form.get('comprador','').strip(); telefone=request.form.get('telefone','').strip()
+                    _registrar_movimento_status(conn,card,evento_id,'reserva',vendedor['id'],comprador,telefone,None)
+                    conn.commit(); flash(f'Cartela {numero:04d} reservada. Ela ainda não participa do sorteio.','success')
+                elif acao=='pagar' and card['status']=='reservada':
+                    pagamento=normalizar_forma_pagamento(request.form.get('pagamento',''))
+                    if pagamento=='Não informado':
+                        flash('Informe a forma de pagamento para confirmar o recebimento.','warning')
+                    else:
+                        _registrar_movimento_status(conn,card,evento_id,'pagamento_confirmado',vendedor['id'],card['comprador'],card['telefone'],pagamento)
+                        conn.commit(); flash(f'Pagamento confirmado. A cartela {numero:04d} agora participa do sorteio.','success')
+                elif acao=='reservar_vendida' and card['status']=='vendida':
+                    _registrar_movimento_status(conn,card,evento_id,'reserva',vendedor['id'],card['comprador'],card['telefone'],None,'Venda convertida em reserva para aguardar pagamento.')
+                    conn.commit(); flash(f'Cartela {numero:04d} marcada como reservada. Ela não participa do sorteio até o pagamento.','success')
+                elif acao=='cancelar' and card['status'] in ('vendida','reservada'):
+                    _registrar_movimento_status(conn,card,evento_id,'cancelamento',vendedor['id'],card['comprador'],card['telefone'],card['pagamento'],'Cancelamento/estorno pelo vendedor.')
+                    conn.commit(); flash(f'Cartela {numero:04d} cancelada e liberada novamente.','success')
+                else:
+                    flash('Ação não permitida para o estado atual da cartela.','warning')
+            except Exception as exc:
+                conn.rollback(); flash(f'Não foi possível atualizar a cartela: {exc}','danger')
+            card=conn.execute("""SELECT c.*,v.nome vendedor FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id WHERE c.id=?""",(card['id'],)).fetchone()
     rodada=rodada_ativa(conn,evento_id)
     sorteados=[r['numero'] for r in conn.execute("SELECT numero FROM sorteios WHERE evento_id=? ORDER BY ordem", (evento_id,)).fetchall()]
     atende=bool(card['status']=='vendida' and rodada and cartela_status_rodada(card,sorteados,rodada))
@@ -3043,8 +3178,8 @@ def usuario_acao(usuario_id):
 def venda_cancelar(numero):
     conn=get_db(); evento=evento_ativo(conn)
     card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?", (evento['id'],numero)).fetchone()
-    if not card or card['status']!='vendida':
-        conn.close(); flash('A cartela informada não possui uma venda ativa.', 'warning'); return redirect(url_for('vendas'))
+    if not card or card['status'] not in ('vendida','reservada'):
+        conn.close(); flash('A cartela informada não possui uma venda ou reserva ativa.', 'warning'); return redirect(url_for('vendas'))
     motivo=request.form.get('motivo','').strip() or 'Cancelamento/estorno'
     agora=iso_brasilia(); suid=_novo_sync_uuid()
     conn.execute("""INSERT INTO movimentacoes_vendas (evento_id,cartela_id,numero,tipo,comprador,telefone,pagamento,vendedor_id,usuario_id,motivo,criado_em,origem,sync_uuid,sync_enviado)
@@ -3053,8 +3188,38 @@ def venda_cancelar(numero):
     if BINGO_MODE=='cloud':
         payload={'sync_uuid':suid,'evento_id':evento['id'],'numero':numero,'tipo':'cancelamento','comprador':card['comprador'],'telefone':card['telefone'],'pagamento':card['pagamento'],'vendedor_id':card['vendedor_id'],'motivo':motivo,'criado_em':agora}
         _registrar_evento_sync(conn,suid,'cancelamento',evento['id'],numero,payload,'nuvem')
-    conn.commit(); conn.close(); flash(f'Venda da cartela {numero:04d} cancelada e cartela liberada novamente.', 'success')
+    conn.commit(); conn.close(); flash(f'Cartela {numero:04d} cancelada e cartela liberada novamente.', 'success')
     return redirect(url_for('vendas'))
+
+@app.route('/vendas/<int:numero>/reservar', methods=['POST'])
+def venda_reservar(numero):
+    conn=get_db(); evento=evento_ativo(conn)
+    card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?", (evento['id'],numero)).fetchone()
+    if not card or card['status']!='vendida':
+        conn.close(); flash('A cartela informada não está marcada como vendida.', 'warning'); return redirect(url_for('vendas'))
+    motivo='Venda convertida em reserva para aguardar pagamento.'
+    try:
+        _registrar_movimento_status(conn,card,evento['id'],'reserva',card['vendedor_id'],card['comprador'],card['telefone'],None,motivo,'painel')
+        conn.commit(); flash(f'Cartela {numero:04d} marcada como reservada.','success')
+    except Exception as exc:
+        conn.rollback(); flash(f'Não foi possível marcar como reservada: {exc}','danger')
+    conn.close(); return redirect(url_for('vendas'))
+
+@app.route('/vendas/<int:numero>/pagar', methods=['POST'])
+def venda_pagar(numero):
+    conn=get_db(); evento=evento_ativo(conn)
+    card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?", (evento['id'],numero)).fetchone()
+    if not card or card['status']!='reservada':
+        conn.close(); flash('A cartela informada não está reservada.', 'warning'); return redirect(url_for('vendas'))
+    pagamento=normalizar_forma_pagamento(request.form.get('pagamento',''))
+    if pagamento=='Não informado':
+        conn.close(); flash('Informe a forma de pagamento para confirmar o recebimento.','warning'); return redirect(url_for('vendas'))
+    try:
+        _registrar_movimento_status(conn,card,evento['id'],'pagamento_confirmado',card['vendedor_id'],card['comprador'],card['telefone'],pagamento,'Pagamento confirmado pelo painel.','painel')
+        conn.commit(); flash(f'Pagamento da cartela {numero:04d} confirmado.','success')
+    except Exception as exc:
+        conn.rollback(); flash(f'Não foi possível confirmar o pagamento: {exc}','danger')
+    conn.close(); return redirect(url_for('vendas'))
 
 
 def _caixa_valor_sistema(conn, caixa, evento):
