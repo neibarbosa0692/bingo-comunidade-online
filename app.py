@@ -623,8 +623,9 @@ def _cloud_aplicar_snapshot(snapshot):
         if numero is None: continue
         atual=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?",(eid,numero)).fetchone()
         if atual:
-            manter_venda = ((atual['status']=='vendida' and c.get('status')!='vendida') or
-                            (atual['status']=='reservada' and c.get('status')=='disponivel'))
+            # O snapshot é catálogo; mudanças de estado de venda/reserva chegam pela fila de movimentos.
+            # Assim, um snapshot antigo nunca desfaz uma venda paga ou uma reserva ativa.
+            manter_venda = atual['status'] in ('vendida','reservada') and c.get('status') != atual['status']
             if manter_venda:
                 conn.execute("UPDATE cartelas SET numeros=?,vendedor_id=?,lote_id=?,impressa_em=?,inutilizada_em=?,inutilizada_motivo=? WHERE id=?",
                              (c.get('numeros'),c.get('vendedor_id'),c.get('lote_id'),c.get('impressa_em'),c.get('inutilizada_em'),c.get('inutilizada_motivo'),atual['id']))
