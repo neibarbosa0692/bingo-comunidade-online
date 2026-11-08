@@ -1214,7 +1214,7 @@ ENDPOINT_PERMISSAO = {
 
 PUBLIC_ENDPOINTS = {
     'login','logout','static','health','telao','api_estado_sorteio',
-    'mobile_home','mobile_vendedor','mobile_selecionar','mobile_sair','mobile_abrir_cartela','mobile_cartela','mobile_comprovante',
+    'mobile_home','mobile_vendedor','mobile_selecionar','mobile_sair','mobile_abrir_cartela','mobile_cartela','mobile_vendas','mobile_venda_acao','mobile_comprovante',
     'api_sync_health','api_sync_snapshot','api_sync_movements','api_sync_events','api_sync_reset_test_data',
 }
 
