@@ -1877,8 +1877,8 @@ def vendas():
         try: busca_numero=int(busca_raw)
         except ValueError: busca_numero=0
         busca_resultado=conn.execute("""SELECT c.*,v.nome vendedor,
-            (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
-            (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo='venda' ORDER BY m2.id DESC LIMIT 1) origem,
+            (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo IN ('venda','pagamento_confirmado')) movimento_id,
+            (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo IN ('venda','pagamento_confirmado') ORDER BY m2.id DESC LIMIT 1) origem,
             (SELECT m3.criado_em FROM movimentacoes_vendas m3 WHERE m3.cartela_id=c.id AND m3.tipo='venda' ORDER BY m3.id DESC LIMIT 1) venda_registrada_em
             FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id
             WHERE c.evento_id=? AND c.numero=?""", (evento['id'],busca_numero)).fetchone()
@@ -2719,7 +2719,7 @@ def busca():
 
 @app.route('/comprovantes/venda/<int:mov_id>.pdf')
 def comprovante_venda(mov_id):
-    conn=get_db(); mov=conn.execute("SELECT * FROM movimentacoes_vendas WHERE id=? AND tipo='venda'",(mov_id,)).fetchone()
+    conn=get_db(); mov=conn.execute("SELECT * FROM movimentacoes_vendas WHERE id=? AND tipo IN ('venda','pagamento_confirmado')",(mov_id,)).fetchone()
     if not mov:
         conn.close(); flash('Registro de venda não encontrado.','warning'); return redirect(url_for('vendas'))
     evento=conn.execute("SELECT * FROM eventos WHERE id=?",(mov['evento_id'],)).fetchone()
@@ -2736,7 +2736,7 @@ def mobile_comprovante(evento_id,numero):
     card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=? AND status='vendida'",(evento_id,numero)).fetchone()
     if not evento or not card:
         conn.close(); return Response('Comprovante não disponível.',status=404)
-    mov=conn.execute("SELECT * FROM movimentacoes_vendas WHERE cartela_id=? AND tipo='venda' ORDER BY id DESC LIMIT 1",(card['id'],)).fetchone()
+    mov=conn.execute("SELECT * FROM movimentacoes_vendas WHERE cartela_id=? AND tipo IN ('venda','pagamento_confirmado') ORDER BY id DESC LIMIT 1",(card['id'],)).fetchone()
     if not mov:
         conn.close(); return Response('Comprovante não disponível.',status=404)
     vendedor=conn.execute("SELECT * FROM vendedores WHERE id=?",(mov['vendedor_id'],)).fetchone() if mov['vendedor_id'] else None
