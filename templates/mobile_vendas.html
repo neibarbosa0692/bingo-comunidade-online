@@ -1,0 +1,29 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Minhas vendas • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}"></head>
+<body class="mobile-body"><main class="mobile-shell">
+<header class="mobile-top"><div class="mobile-brand"><img src="{{ url_for('static', filename='logo_sistema_bc.png') }}" alt="Logo do sistema"></div><div><span>BINGO COMUNIDADE • V11</span><h1>Minhas vendas</h1></div></header>
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+<section class="mobile-welcome seller-summary"><div class="seller-identity"><span>VENDEDOR</span><h2>{{ vendedor.nome }}</h2><a href="{{ url_for('mobile_home') }}">← Voltar ao resumo</a></div>
+<div class="seller-balance"><div class="seller-balance-item"><small>Total</small><strong>{{ dados.total }}</strong></div><div class="seller-balance-item"><small>Pagas</small><strong>{{ dados.vendidas }}</strong></div><div class="seller-balance-item"><small>Reservadas</small><strong>{{ dados.reservadas }}</strong></div></div></section>
+<section class="mobile-card"><span class="eyebrow">FINANCEIRO</span><div class="seller-balance"><div class="seller-balance-item"><small>Recebido</small><strong>R$ {{ "%.2f"|format(dados.recebido) }}</strong></div><div class="seller-balance-item"><small>A receber</small><strong>R$ {{ "%.2f"|format(dados.pendente) }}</strong></div><div class="seller-balance-item"><small>Previsto</small><strong>R$ {{ "%.2f"|format(dados.previsto) }}</strong></div></div></section>
+<section class="mobile-card"><span class="eyebrow">VENDAS</span><h3>Cartelas entregues ao comprador</h3>
+{% if vendas %}
+<div class="mobile-card-list">
+{% for c in vendas %}
+<div class="mobile-card-item {{ c.status }}">
+<a href="{{ url_for('mobile_cartela',evento_id=evento.id,numero=c.numero) }}" style="display:block;text-decoration:none;color:inherit">
+<b>{{ '%04d'|format(c.numero) }}</b>
+<span>{% if c.status=='reservada' %}🟡 Reservada{% else %}✓ Paga / Vendida{% endif %}</span>
+{% if c.comprador %}<small>{{ c.comprador }}</small>{% endif %}
+</a>
+{% if c.status=='reservada' and not vendas_fechadas %}
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:8px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="pagar"><select name="pagamento" required><option value="">Pagamento...</option><option>PIX</option><option>Dinheiro</option><option>Outros</option></select><button class="btn btn-primary btn-full">💰 Marcar como paga</button></form>
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:6px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="cancelar"><button class="btn btn-full">↩ Cancelar reserva</button></form>
+{% elif c.status=='vendida' and not vendas_fechadas %}
+<form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:8px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="reservar_vendida"><button class="btn btn-full">🟡 Voltar para reserva</button></form>
+{% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}<p class="muted">Nenhuma venda ou reserva registrada.</p>{% endif %}
+</section>
+<footer class="mobile-footer">{% if mode=='cloud' %}Servidor online{% else %}Servidor local{% endif %} • Somente cartelas pagas participam do sorteio.</footer></main></body></html>
