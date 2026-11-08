@@ -21,7 +21,7 @@
 {% elif c.status=='vendida' and not vendas_fechadas %}
 <form method="post" action="{{ url_for('mobile_venda_acao',numero=c.numero) }}" style="margin-top:8px" onclick="event.stopPropagation()"><input type="hidden" name="acao" value="reservar_vendida"><button class="btn btn-full">🟡 Voltar para reserva</button></form>
 {% endif %}
-</a>
+</div>
 {% endfor %}
 </div>
 {% else %}<p class="muted">Nenhuma venda ou reserva registrada.</p>{% endif %}
