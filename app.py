@@ -1908,11 +1908,11 @@ def vendas():
                     _registrar_evento_sync(conn,suid,'venda',evento['id'],numero,payload,'nuvem')
                 conn.commit(); flash(f'Cartela {numero:04d} marcada como {"vendida e paga" if status_novo=="vendida" else "reservada (aguardando pagamento)"}.', 'success')
     vend=conn.execute("SELECT * FROM vendedores WHERE COALESCE(online_ativo,1)=1 ORDER BY nome").fetchall()
-    recentes=conn.execute("""SELECT c.numero,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
+    recentes=conn.execute("""SELECT c.numero,c.status,c.comprador,c.pagamento,c.vendido_em,v.nome vendedor,
         (SELECT MAX(m.id) FROM movimentacoes_vendas m WHERE m.cartela_id=c.id AND m.tipo='venda') movimento_id,
         (SELECT m2.origem FROM movimentacoes_vendas m2 WHERE m2.cartela_id=c.id AND m2.tipo='venda' ORDER BY m2.id DESC LIMIT 1) origem
-        FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id WHERE c.evento_id=? AND c.status='vendida'
-        ORDER BY COALESCE(c.vendido_em,'' ) DESC,c.id DESC LIMIT 20""", (evento['id'],)).fetchall()
+        FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id WHERE c.evento_id=? AND c.status IN ('vendida','reservada')
+        ORDER BY CASE WHEN c.status='reservada' THEN 0 ELSE 1 END, COALESCE(c.vendido_em,'' ) DESC,c.id DESC LIMIT 20""", (evento['id'],)).fetchall()
     historico=conn.execute("""SELECT m.*,v.nome vendedor,u.nome usuario_nome FROM movimentacoes_vendas m
         LEFT JOIN vendedores v ON v.id=m.vendedor_id LEFT JOIN usuarios u ON u.id=m.usuario_id
         WHERE m.evento_id=? ORDER BY m.id DESC LIMIT 40""", (evento['id'],)).fetchall()
