@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Bingo Móvel • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}"><link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"><link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}"></head>
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Bingo Móvel • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}?v={{ system_build }}"><link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}"><link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}"></head>
 <body class="mobile-body"><main class="mobile-shell">
 <header class="mobile-top"><div class="mobile-brand"><img src="{{ url_for('static', filename='logo_sistema_bc.png') }}" alt="Logo do sistema"></div><div><span>BINGO COMUNIDADE • V11</span><h1>{{ evento.nome }}</h1></div></header>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
@@ -16,14 +16,23 @@
     <div class="seller-balance-item"><small>Restantes</small><strong>{{ restantes }}</strong></div>
   </div>
 </section>
-<section class="mobile-card seller-finance-card">
+<section class="mobile-card seller-finance-card" style="padding:20px 18px 18px!important;overflow:visible!important;">
 <span class="eyebrow">FINANCEIRO</span>
-<div class="seller-finance-grid">
-  <div class="seller-finance-value"><small>RECEBIDO</small><strong>R$ {{ "%.2f"|format(recebido) }}</strong></div>
-  <div class="seller-finance-value"><small>A RECEBER</small><strong>R$ {{ "%.2f"|format(pendente) }}</strong></div>
-  <div class="seller-finance-value"><small>PREVISTO</small><strong>R$ {{ "%.2f"|format(previsto) }}</strong></div>
+<div class="seller-finance-grid" style="display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;width:100%!important;margin:12px 0 0!important;box-sizing:border-box!important;">
+  <div class="seller-finance-value" style="display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;min-width:0!important;min-height:68px!important;padding:10px 4px!important;box-sizing:border-box!important;background:#f4f6fa!important;border:1px solid #dfe3eb!important;border-radius:14px!important;text-align:center!important;">
+    <small style="display:block!important;color:#667085!important;font-size:9px!important;line-height:1.2!important;letter-spacing:.4px!important;font-weight:900!important;margin:0 0 6px!important;white-space:nowrap!important;">RECEBIDO</small>
+    <strong style="display:block!important;color:#172033!important;font-size:17px!important;line-height:1.15!important;font-weight:900!important;white-space:nowrap!important;">R$ {{ "%.2f"|format(recebido) }}</strong>
+  </div>
+  <div class="seller-finance-value" style="display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;min-width:0!important;min-height:68px!important;padding:10px 4px!important;box-sizing:border-box!important;background:#f4f6fa!important;border:1px solid #dfe3eb!important;border-radius:14px!important;text-align:center!important;">
+    <small style="display:block!important;color:#667085!important;font-size:9px!important;line-height:1.2!important;letter-spacing:.4px!important;font-weight:900!important;margin:0 0 6px!important;white-space:nowrap!important;">A RECEBER</small>
+    <strong style="display:block!important;color:#172033!important;font-size:17px!important;line-height:1.15!important;font-weight:900!important;white-space:nowrap!important;">R$ {{ "%.2f"|format(pendente) }}</strong>
+  </div>
+  <div class="seller-finance-value" style="display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;min-width:0!important;min-height:68px!important;padding:10px 4px!important;box-sizing:border-box!important;background:#f4f6fa!important;border:1px solid #dfe3eb!important;border-radius:14px!important;text-align:center!important;">
+    <small style="display:block!important;color:#667085!important;font-size:9px!important;line-height:1.2!important;letter-spacing:.4px!important;font-weight:900!important;margin:0 0 6px!important;white-space:nowrap!important;">PREVISTO</small>
+    <strong style="display:block!important;color:#172033!important;font-size:17px!important;line-height:1.15!important;font-weight:900!important;white-space:nowrap!important;">R$ {{ "%.2f"|format(previsto) }}</strong>
+  </div>
 </div>
-<a class="btn btn-primary btn-full seller-finance-button" href="{{ url_for("mobile_vendas") }}">📋 Minhas vendas e pagamentos</a>
+<a class="btn btn-primary btn-full seller-finance-button" style="display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-height:52px!important;box-sizing:border-box!important;margin:16px 0 0!important;" href="{{ url_for("mobile_vendas") }}">📋 Minhas vendas e pagamentos</a>
 </section>
 <section class="mobile-card"><span class="eyebrow">VENDA</span><h3>Digitar número da cartela</h3><form action="{{ url_for('mobile_abrir_cartela') }}" method="post" class="inline-form"><input type="number" name="numero" min="1" placeholder="Ex.: 347" required><button class="btn btn-primary">Abrir</button></form></section>
 <section class="mobile-card"><span class="eyebrow">MINHAS CARTELAS</span><h3>Lote sob sua responsabilidade</h3><div class="mobile-card-list">{% for c in minhas %}<a href="{{ url_for('mobile_cartela',evento_id=evento.id,numero=c.numero) }}" class="mobile-card-item {{ c.status }}"><b>{{ '%04d'|format(c.numero) }}</b><span>{% if c.status=='vendida' %}Paga / Vendida{% elif c.status=='reservada' %}Reservada / Aguardando pagamento{% else %}Disponível{% endif %}</span>{% if c.comprador %}<small>{{ c.comprador }}</small>{% endif %}</a>{% else %}<p class="muted">Nenhuma cartela atribuída a este vendedor.</p>{% endfor %}</div></section>
