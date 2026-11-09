@@ -16,7 +16,15 @@
     <div class="seller-balance-item"><small>Restantes</small><strong>{{ restantes }}</strong></div>
   </div>
 </section>
-<section class="mobile-card seller-finance-card"><span class="eyebrow">FINANCEIRO</span><div class="seller-balance seller-finance-balance"><div class="seller-balance-item"><small>Recebido</small><strong>R$ {{ "%.2f"|format(recebido) }}</strong></div><div class="seller-balance-item"><small>A receber</small><strong>R$ {{ "%.2f"|format(pendente) }}</strong></div><div class="seller-balance-item"><small>Previsto</small><strong>R$ {{ "%.2f"|format(previsto) }}</strong></div></div><a class="btn btn-primary btn-full seller-finance-button" href="{{ url_for("mobile_vendas") }}">📋 Minhas vendas e pagamentos</a></section>
+<section class="mobile-card seller-finance-card">
+<span class="eyebrow">FINANCEIRO</span>
+<div class="seller-finance-grid">
+  <div class="seller-finance-value"><small>RECEBIDO</small><strong>R$ {{ "%.2f"|format(recebido) }}</strong></div>
+  <div class="seller-finance-value"><small>A RECEBER</small><strong>R$ {{ "%.2f"|format(pendente) }}</strong></div>
+  <div class="seller-finance-value"><small>PREVISTO</small><strong>R$ {{ "%.2f"|format(previsto) }}</strong></div>
+</div>
+<a class="btn btn-primary btn-full seller-finance-button" href="{{ url_for("mobile_vendas") }}">📋 Minhas vendas e pagamentos</a>
+</section>
 <section class="mobile-card"><span class="eyebrow">VENDA</span><h3>Digitar número da cartela</h3><form action="{{ url_for('mobile_abrir_cartela') }}" method="post" class="inline-form"><input type="number" name="numero" min="1" placeholder="Ex.: 347" required><button class="btn btn-primary">Abrir</button></form></section>
 <section class="mobile-card"><span class="eyebrow">MINHAS CARTELAS</span><h3>Lote sob sua responsabilidade</h3><div class="mobile-card-list">{% for c in minhas %}<a href="{{ url_for('mobile_cartela',evento_id=evento.id,numero=c.numero) }}" class="mobile-card-item {{ c.status }}"><b>{{ '%04d'|format(c.numero) }}</b><span>{% if c.status=='vendida' %}Paga / Vendida{% elif c.status=='reservada' %}Reservada / Aguardando pagamento{% else %}Disponível{% endif %}</span>{% if c.comprador %}<small>{{ c.comprador }}</small>{% endif %}</a>{% else %}<p class="muted">Nenhuma cartela atribuída a este vendedor.</p>{% endfor %}</div></section>
 {% else %}
