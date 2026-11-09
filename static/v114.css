@@ -20,3 +20,23 @@
 .v7-screen-numbers span{font-size:20px!important}.v7-screen-head>div:first-child>span{font-size:13px!important}.v7-screen-head h1{font-size:34px!important}.v7-called span{font-size:11px!important}.v7-called strong{font-size:23px!important}.screen-body-v7 .live-chip{font-size:13px!important}.v7-screen-round div span{font-size:11px!important}.v7-screen-round div strong{font-size:25px!important}.v7-screen-round>b,.v7-screen-round>em{font-size:18px!important}.v7-screen-label,.v7-last-title{font-size:12px!important}.v7-screen-ball span{font-size:29px!important}.v7-screen-last span{font-size:17px!important}.v7-board-title span{font-size:13px!important}.v7-board-title strong{font-size:14px!important}
 .v7-screen-near{grid-template-columns:13vw minmax(0,1fr) 26vw!important;gap:.75vw!important}.v7-near-title span{font-size:11px!important}.v7-near-title strong{font-size:20px!important}.v7-screen-near-grid{grid-template-columns:repeat(3,1fr)!important;gap:.55vw!important}.v7-screen-near-group>div b{font-size:12px!important}.v7-screen-near-group>div strong{font-size:19px!important}.v7-screen-near-group section span,.v7-screen-near-group section em{font-size:11px!important}.v7-screen-near-group section small{font-size:11px!important}
 .v114-screen-winners{min-width:0;background:#111a2d;border:1px solid #283650;border-radius:.9vw;padding:.65vh .7vw;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}.v114-winners-title{display:flex;align-items:center;justify-content:space-between;gap:.5vw;border-bottom:1px solid #26344d;padding-bottom:.45vh}.v114-winners-title span{font-size:13px;font-weight:950;letter-spacing:.08em;color:#ffd477}.v114-winners-title strong{min-width:28px;height:28px;border-radius:999px;display:grid;place-items:center;background:#2c3750;color:#fff;font-size:14px}.v114-winners-list{min-height:0;overflow:auto;padding-top:.45vh;display:flex;flex-direction:column;gap:.35vh}.v114-winners-list>small{font-size:12px;color:#6e7b96;padding:.55vh 0}.v114-winner-row{display:grid;grid-template-columns:.9fr 1.3fr auto;gap:.45vw;align-items:center;background:#172238;border:1px solid #25324a;border-radius:.55vw;padding:.45vh .5vw;min-width:0}.v114-winner-row b,.v114-winner-row span,.v114-winner-row em{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.v114-winner-row b{font-size:12px;color:#ffd477}.v114-winner-row span{font-size:12px;font-weight:800;color:#eef2fb}.v114-winner-row em{font-size:11px;font-style:normal;color:#aab5ca}@media(max-width:1250px){.v7-screen-near{grid-template-columns:10vw minmax(0,1fr) 27vw!important}.v114-winner-row{grid-template-columns:1fr}.v114-winner-row em{display:none}}
+
+/* Vendedor: financeiro legível no cartão branco */
+.seller-finance-card{overflow:visible}
+.seller-finance-balance{margin-top:10px}
+.seller-finance-card .seller-balance-item{background:#f5f6fa;border:1px solid #dfe3ec;backdrop-filter:none}
+.seller-finance-card .seller-balance-item small{color:#667085}
+.seller-finance-card .seller-balance-item strong{color:#172033}
+.seller-finance-button{margin-top:16px!important;position:relative;z-index:1}
+.mobile-vendas-list{grid-template-columns:1fr!important;gap:10px!important}
+.mobile-vendas-item{padding:14px!important}
+.mobile-vendas-item .venda-acoes{display:grid;gap:7px;margin-top:10px}
+.mobile-vendas-item .venda-acoes form{margin-top:0!important}
+.mobile-vendas-item select,.mobile-vendas-item button{width:100%;box-sizing:border-box}
+@media(max-width:520px){
+  .seller-finance-card{padding:17px!important}
+  .seller-finance-balance{gap:6px!important}
+  .seller-finance-card .seller-balance-item{padding:10px 4px!important}
+  .seller-finance-card .seller-balance-item strong{font-size:17px!important}
+  .seller-finance-card .seller-balance-item small{font-size:8px!important;color:#667085!important}
+}

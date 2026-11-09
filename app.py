@@ -2240,7 +2240,7 @@ def mobile_vendas():
     vendas=conn.execute("""SELECT c.*, v.nome vendedor
         FROM cartelas c LEFT JOIN vendedores v ON v.id=c.vendedor_id
         WHERE c.evento_id=? AND c.vendedor_id=? AND c.status IN ('vendida','reservada')
-        ORDER BY CASE WHEN c.status='reservada' THEN 0 ELSE 1 END, c.numero""",
+        ORDER BY c.numero""",
         (evento['id'],vendedor['id'])).fetchall()
     dados={
         'total':int(resumo['total'] or 0),
@@ -2262,9 +2262,9 @@ def mobile_venda_acao(numero):
         vendedor=conn.execute("SELECT * FROM vendedores WHERE id=? AND COALESCE(online_ativo,1)=1",(session['vendedor_id'],)).fetchone()
     card=conn.execute("SELECT * FROM cartelas WHERE evento_id=? AND numero=?",(evento['id'],numero)).fetchone()
     if not vendedor or not card or card['vendedor_id'] != vendedor['id']:
-        conn.close(); flash('Cartela não encontrada ou fora do seu lote.','danger'); return redirect(url_for('mobile_vendas'))
+        conn.close(); flash('Cartela não encontrada ou fora do seu lote.','danger'); return redirect(url_for('mobile_vendas', scroll=request.form.get('scroll_y','')))
     if vendas_fechadas(evento):
-        conn.close(); flash('As vendas estão encerradas para preparação do sorteio.','warning'); return redirect(url_for('mobile_vendas'))
+        conn.close(); flash('As vendas estão encerradas para preparação do sorteio.','warning'); return redirect(url_for('mobile_vendas', scroll=request.form.get('scroll_y','')))
     acao=request.form.get('acao','')
     try:
         if acao=='reservar' and card['status']=='disponivel':
@@ -2289,7 +2289,7 @@ def mobile_venda_acao(numero):
             flash('Ação não permitida para o estado atual da cartela.','warning')
     except Exception as exc:
         conn.rollback(); flash(f'Não foi possível atualizar a cartela: {exc}','danger')
-    conn.close(); return redirect(url_for('mobile_vendas'))
+    conn.close(); return redirect(url_for('mobile_vendas', scroll=request.form.get('scroll_y','')))
 
 @app.route('/m/<int:evento_id>/<int:numero>', methods=['GET','POST'])
 def mobile_cartela(evento_id, numero):
