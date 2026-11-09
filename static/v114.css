@@ -75,3 +75,16 @@
  .vendas-grupo-titulo{padding:10px 12px;font-size:11px}
  .mobile-vendas-item .venda-comprador{font-size:17px!important}
 }
+
+/* Filtros compactos para a lista de vendas no celular */
+.vendas-filtros-mobile{display:flex;gap:6px;margin:14px 0 6px;padding:5px;background:#f1f3f7;border:1px solid #e1e4eb;border-radius:14px}
+.vendas-filtro{flex:1;min-width:0;border:0;border-radius:10px;background:transparent;padding:10px 5px;font-size:11px;font-weight:900;color:#667085;cursor:pointer;white-space:nowrap}
+.vendas-filtro span{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:2px;border-radius:999px;background:#e3e6ed;color:#344054;font-size:10px}
+.vendas-filtro.ativo{background:#fff;box-shadow:0 1px 4px rgba(16,24,40,.12);color:#172033}
+.vendas-filtro.ativo span{background:#5646e8;color:#fff}
+@media(max-width:520px){
+ .vendas-filtros-mobile{position:sticky;top:0;z-index:10;margin:12px -2px 8px}
+ .vendas-filtro{padding:11px 3px;font-size:10px}
+ .vendas-grupo{margin-top:12px}
+ .vendas-grupo-titulo{margin-bottom:8px}
+}
