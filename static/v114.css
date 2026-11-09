@@ -58,3 +58,20 @@
 @media(max-width:360px){
  .seller-finance-value strong{font-size:14px!important}
 }
+
+/* Organização da lista do vendedor */
+.vendas-grupo{margin-top:18px}
+.vendas-grupo:first-of-type{margin-top:14px}
+.vendas-grupo-titulo{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;margin-bottom:10px;border-radius:12px;font-size:12px;font-weight:950;letter-spacing:.04em}
+.vendas-grupo-titulo span{display:grid;place-items:center;min-width:28px;height:28px;padding:0 8px;border-radius:999px;font-size:12px}
+.vendas-grupo-vendidas{background:#eef7f0;border:1px solid #cfe5d4;color:#245b31}
+.vendas-grupo-vendidas span{background:#d8eedc;color:#245b31}
+.vendas-grupo-reservadas{background:#fff7df;border:1px solid #f0dfaa;color:#76580b}
+.vendas-grupo-reservadas span{background:#f7e7b2;color:#76580b}
+.vendas-grupo-vazio{padding:8px 4px 2px}
+.mobile-vendas-item .venda-comprador{display:block!important;font-size:17px!important;line-height:1.25!important;font-weight:800!important;color:#172033!important;margin-top:5px!important}
+@media(max-width:520px){
+ .vendas-grupo{margin-top:16px}
+ .vendas-grupo-titulo{padding:10px 12px;font-size:11px}
+ .mobile-vendas-item .venda-comprador{font-size:17px!important}
+}
