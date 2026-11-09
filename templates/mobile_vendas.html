@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Minhas vendas • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}?v={{ system_build }}&t=3"></head>
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Minhas vendas • {{ evento.nome }}</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='v114.css') }}?v={{ system_build }}&t=4"></head>
 <body class="mobile-body"><main class="mobile-shell">
 <header class="mobile-top"><div class="mobile-brand"><img src="{{ url_for('static', filename='logo_sistema_bc.png') }}" alt="Logo do sistema"></div><div><span>BINGO COMUNIDADE • V11</span><h1>Minhas vendas</h1></div></header>
 {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
@@ -7,10 +7,15 @@
 <section class="mobile-card seller-finance-card"><span class="eyebrow">FINANCEIRO</span><div class="seller-balance seller-finance-balance"><div class="seller-balance-item"><small>Recebido</small><strong>R$ {{ "%.2f"|format(dados.recebido) }}</strong></div><div class="seller-balance-item"><small>A receber</small><strong>R$ {{ "%.2f"|format(dados.pendente) }}</strong></div><div class="seller-balance-item"><small>Previsto</small><strong>R$ {{ "%.2f"|format(dados.previsto) }}</strong></div></div></section>
 <section class="mobile-card"><span class="eyebrow">VENDAS</span><h3>Cartelas entregues ao comprador</h3>
 {% if vendas %}
+<div class="vendas-filtros-mobile" role="tablist" aria-label="Filtrar cartelas">
+  <button type="button" class="vendas-filtro ativo" data-filtro="todas">Todas <span>{{ dados.total }}</span></button>
+  <button type="button" class="vendas-filtro" data-filtro="vendidas">✓ Pagas <span>{{ dados.vendidas }}</span></button>
+  <button type="button" class="vendas-filtro" data-filtro="reservadas">🟡 Reservadas <span>{{ dados.reservadas }}</span></button>
+</div>
 {% set ns = namespace(vendidas=0, reservadas=0) %}
 {% for c in vendas %}{% if c.status=='vendida' %}{% set ns.vendidas = ns.vendidas + 1 %}{% elif c.status=='reservada' %}{% set ns.reservadas = ns.reservadas + 1 %}{% endif %}{% endfor %}
 
-<div class="vendas-grupo">
+<div class="vendas-grupo vendas-grupo-vendidas-wrap" data-grupo="vendidas">
   <div class="vendas-grupo-titulo vendas-grupo-vendidas"><strong>✓ PAGAS / VENDIDAS</strong><span>{{ ns.vendidas }}</span></div>
   {% if ns.vendidas %}
   <div class="mobile-card-list mobile-vendas-list">
@@ -32,7 +37,7 @@
   {% else %}<p class="muted vendas-grupo-vazio">Nenhuma cartela paga/vendida.</p>{% endif %}
 </div>
 
-<div class="vendas-grupo">
+<div class="vendas-grupo vendas-grupo-reservadas-wrap" data-grupo="reservadas">
   <div class="vendas-grupo-titulo vendas-grupo-reservadas"><strong>🟡 RESERVADAS</strong><span>{{ ns.reservadas }}</span></div>
   {% if ns.reservadas %}
   <div class="mobile-card-list mobile-vendas-list">
@@ -59,18 +64,21 @@
 <script>
 (function(){
   const y = Number({{ request.args.get("scroll", "0")|tojson }} || 0);
-  if (y > 0) {
-    window.setTimeout(function(){ window.scrollTo(0, y); }, 60);
+  const filtros = document.querySelectorAll(".vendas-filtro");
+  const grupos = document.querySelectorAll(".vendas-grupo[data-grupo]");
+  const saved = sessionStorage.getItem("bingo_vendas_filtro") || "todas";
+  function aplicarFiltro(filtro){
+    filtros.forEach(function(btn){ btn.classList.toggle("ativo", btn.dataset.filtro === filtro); });
+    grupos.forEach(function(grupo){ grupo.style.display = (filtro === "todas" || grupo.dataset.grupo === filtro) ? "" : "none"; });
+    sessionStorage.setItem("bingo_vendas_filtro", filtro);
   }
+  filtros.forEach(function(btn){ btn.addEventListener("click", function(){ aplicarFiltro(btn.dataset.filtro); }); });
+  aplicarFiltro(saved);
+  if (y > 0) window.setTimeout(function(){ window.scrollTo(0, y); }, 80);
   document.querySelectorAll("form[action*=\"/mobile/vendas/\"]").forEach(function(form){
     form.addEventListener("submit", function(){
       let input = form.querySelector("input[name=\"scroll_y\"]");
-      if (!input) {
-        input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "scroll_y";
-        form.appendChild(input);
-      }
+      if (!input) { input = document.createElement("input"); input.type="hidden"; input.name="scroll_y"; form.appendChild(input); }
       input.value = String(window.scrollY || window.pageYOffset || 0);
     });
   });
