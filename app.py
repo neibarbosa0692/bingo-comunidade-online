@@ -531,6 +531,7 @@ def _sync_token_valido():
 
 
 def _http_json(method, url, payload=None, token='', timeout=12):
+    """Faz uma chamada HTTP e exige resposta JSON; erros retornam contexto útil."""
     data = None
     headers = {'Accept': 'application/json', 'User-Agent': 'Bingo-Comunidade-V11'}
     if token:
@@ -539,10 +540,26 @@ def _http_json(method, url, payload=None, token='', timeout=12):
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
         headers['Content-Type'] = 'application/json; charset=utf-8'
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode('utf-8')
-        return json.loads(raw) if raw else {}
-
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = getattr(resp, 'status', 200)
+            raw = resp.read().decode('utf-8', errors='replace')
+            if not raw.strip():
+                raise RuntimeError(f'HTTP {status}: servidor respondeu vazio em {url}')
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as exc:
+                trecho = raw.strip().replace('\n', ' ')[:300]
+                raise RuntimeError(f'HTTP {status}: resposta não-JSON em {url}: {trecho}') from exc
+    except urllib.error.HTTPError as exc:
+        try:
+            raw = exc.read().decode('utf-8', errors='replace')
+        except Exception:
+            raw = ''
+        trecho = raw.strip().replace('\n', ' ')[:300]
+        raise RuntimeError(f'HTTP {exc.code}: falha em {url}' + (f' — {trecho}' if trecho else '')) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f'Falha de conexão com {url}: {exc.reason}') from exc
 
 def _sync_atualizar_status(ok, mensagem, catalog=False):
     if BINGO_MODE != 'local':
