@@ -755,8 +755,105 @@ def _sync_pull_eventos(remote, token):
         ok,msg=_aplicar_movimento_recebido(conn,payload,ev.get('origem') or 'nuvem')
         if ok: aplicados+=1
         else: conflitos.append(msg)
+    # Se houver conflito, não avançamos o cursor: os eventos serão reapresentados
+    # na próxima tentativa depois da reconciliação. Eventos já aplicados são idempotentes.
+    if conflitos:
+        max_seq=since
     conn.execute("UPDATE sync_config SET last_pull_seq=? WHERE id=1",(max_seq,)); conn.commit(); conn.close()
     return aplicados, conflitos
+
+
+def _sync_reconciliar_estado(remote, token):
+    """Confere o estado atual das cartelas na nuvem e corrige somente divergências recuperáveis no local."""
+    conn=get_db()
+    evento=evento_ativo(conn)
+    if not evento:
+        conn.close()
+        return {'ok':True,'checked':0,'fixed':0,'conflicts':[]}
+    eid=int(evento['id'])
+    locais={int(r['numero']):dict(r) for r in conn.execute(
+        "SELECT * FROM cartelas WHERE evento_id=? ORDER BY numero",(eid,)
+    ).fetchall()}
+    conn.close()
+
+    resp=_http_json('GET',f"{remote}/api/sync/state?evento_id={eid}",None,token,timeout=30)
+    if not resp.get('ok'):
+        raise RuntimeError(resp.get('message') or 'Falha ao consultar estado da nuvem.')
+    remotos=resp.get('cartelas') or []
+    conflitos=[]
+    corrigidas=0
+    verificadas=0
+
+    conn=get_db()
+    try:
+        for item in remotos:
+            numero=int(item.get('numero') or 0)
+            if not numero:
+                continue
+            verificadas+=1
+            local=locais.get(numero)
+            if not local:
+                conflitos.append(f"Cartela {numero:04d} existe na nuvem, mas não no computador local.")
+                continue
+
+            rs=(item.get('status') or 'disponivel')
+            ls=(local.get('status') or 'disponivel')
+            mesma=(
+                rs==ls and
+                str(item.get('comprador') or '')==str(local.get('comprador') or '') and
+                str(item.get('telefone') or '')==str(local.get('telefone') or '') and
+                str(item.get('pagamento') or '')==str(local.get('pagamento') or '') and
+                str(item.get('vendedor_id') or '')==str(local.get('vendedor_id') or '')
+            )
+            if mesma:
+                continue
+
+            # Se a nuvem possui uma movimentação que explica o estado atual,
+            # ela pode ser reaplicada no local com segurança e de forma idempotente.
+            movimento=item.get('movimento') or {}
+            if movimento.get('sync_uuid'):
+                payload=dict(movimento)
+                payload['sync_uuid']=movimento.get('sync_uuid')
+                payload['evento_id']=eid
+                payload['numero']=numero
+                payload['tipo']=movimento.get('tipo') or item.get('ultimo_tipo')
+                ok,msg=_aplicar_movimento_recebido(conn,payload,'nuvem-reconciliacao')
+                if ok:
+                    corrigidas+=1
+                    continue
+
+            # Caso raro de registro legado sem movimentação associada:
+            # estados ativos da nuvem podem ser recuperados diretamente.
+            if rs in ('vendida','reservada') and ls in ('disponivel',):
+                conn.execute("""UPDATE cartelas SET status=?,comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                             (rs,item.get('comprador'),item.get('telefone'),item.get('pagamento'),item.get('vendedor_id'),item.get('vendido_em'),local['id']))
+                corrigidas+=1
+                continue
+
+            # Nunca apagamos uma venda/reserva local apenas porque a nuvem está disponível.
+            # Isso sinaliza uma situação que precisa ser resolvida pela fila de movimentos.
+            if ls in ('vendida','reservada') and rs=='disponivel':
+                conflitos.append(f"Cartela {numero:04d}: local={ls}, nuvem=disponivel.")
+                continue
+
+            # Para diferenças de estado ativo (ex.: reservada x vendida), a movimentação
+            # mais recente da nuvem é a fonte de verdade.
+            if rs in ('vendida','reservada') and ls in ('vendida','reservada'):
+                conn.execute("""UPDATE cartelas SET status=?,comprador=?,telefone=?,pagamento=?,vendedor_id=?,vendido_em=?,vendido_por_usuario_id=NULL WHERE id=?""",
+                             (rs,item.get('comprador'),item.get('telefone'),item.get('pagamento'),item.get('vendedor_id'),item.get('vendido_em'),local['id']))
+                corrigidas+=1
+                continue
+
+            conflitos.append(f"Cartela {numero:04d}: estado local={ls}, nuvem={rs}.")
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    return {'ok':not conflitos,'checked':verificadas,'fixed':corrigidas,'conflicts':conflitos}
 
 
 def sync_cycle(full=False):
@@ -791,7 +888,9 @@ def sync_cycle(full=False):
         enviados, conflitos_push=_sync_push_movimentos(remote,token)
         recebidos, conflitos_pull=_sync_pull_eventos(remote,token)
         conflitos=(conflitos_push or [])+(conflitos_pull or [])
-        msg=f"Online. {enviados} movimento(s) enviados; {recebidos} recebido(s)."
+        reconciliacao=_sync_reconciliar_estado(remote,token)
+        conflitos+=(reconciliacao.get('conflicts') or [])
+        msg=f"Online. {enviados} movimento(s) enviados; {recebidos} recebido(s); {reconciliacao.get('fixed',0)} divergência(s) corrigida(s)."
         if conflitos: msg += f" {len(conflitos)} conflito(s): " + '; '.join(str(x) for x in conflitos[:3])
         _sync_atualizar_status(not conflitos,msg,catalog=catalog)
         return {'ok':not conflitos,'message':msg,'conflicts':conflitos,'sent':enviados,'received':recebidos}
@@ -1486,6 +1585,48 @@ def api_sync_movements():
     finally:
         conn.close()
     return jsonify({'ok':not conflicts,'accepted':accepted,'conflicts':conflicts})
+
+
+@app.route('/api/sync/state')
+def api_sync_state():
+    """Retorna o estado atual das cartelas e a última movimentação conhecida de cada uma."""
+    if not _sync_token_valido():
+        return jsonify({'ok':False,'error':'unauthorized'}),401
+    if BINGO_MODE != 'cloud':
+        return jsonify({'ok':False,'message':'Este endpoint deve ser usado no servidor online.'}),409
+    try:
+        eid=int(request.args.get('evento_id','0'))
+    except ValueError:
+        eid=0
+    if eid<=0:
+        return jsonify({'ok':False,'message':'evento_id inválido.'}),400
+    conn=get_db()
+    rows=conn.execute("""SELECT c.numero,c.status,c.comprador,c.telefone,c.pagamento,c.vendedor_id,c.vendido_em,
+        m.sync_uuid,m.tipo AS ultimo_tipo,m.comprador AS m_comprador,m.telefone AS m_telefone,
+        m.pagamento AS m_pagamento,m.vendedor_id AS m_vendedor_id,m.criado_em AS m_criado_em,m.motivo AS m_motivo
+        FROM cartelas c
+        LEFT JOIN movimentacoes_vendas m ON m.id=(
+            SELECT MAX(m2.id) FROM movimentacoes_vendas m2
+            WHERE m2.evento_id=c.evento_id AND m2.cartela_id=c.id
+        )
+        WHERE c.evento_id=? ORDER BY c.numero""",(eid,)).fetchall()
+    conn.close()
+    cartelas=[]
+    for r in rows:
+        d={
+            'numero':r['numero'],'status':r['status'],'comprador':r['comprador'],
+            'telefone':r['telefone'],'pagamento':r['pagamento'],'vendedor_id':r['vendedor_id'],
+            'vendido_em':r['vendido_em'],'ultimo_tipo':r['ultimo_tipo']
+        }
+        if r['sync_uuid']:
+            d['movimento']={
+                'sync_uuid':r['sync_uuid'],'evento_id':eid,'numero':r['numero'],
+                'tipo':r['ultimo_tipo'],'comprador':r['m_comprador'],'telefone':r['m_telefone'],
+                'pagamento':r['m_pagamento'],'vendedor_id':r['m_vendedor_id'],
+                'criado_em':r['m_criado_em'],'motivo':r['m_motivo']
+            }
+        cartelas.append(d)
+    return jsonify({'ok':True,'evento_id':eid,'cartelas':cartelas,'time':iso_brasilia()})
 
 
 @app.route('/api/sync/events')
