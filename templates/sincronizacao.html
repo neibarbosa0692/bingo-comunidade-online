@@ -47,9 +47,10 @@
     <p class="muted">{{ cfg.last_sync_msg or 'Ainda não houve uma tentativa de sincronização.' }}</p>
     <form action="{{ url_for('sincronizacao_acao') }}" method="post">
       <input type="hidden" name="acao" value="sincronizar">
-      <button class="btn btn-primary">⇅ Sincronizar agora</button>
+      <button class="btn btn-primary">⇅ Sincronizar e conferir agora</button>
     </form>
     <div class="info-box"><b>Como funciona</b><span>Vendas feitas pelos vendedores na internet descem para este computador. Cadastro de cartelas, lotes e responsáveis sobe do computador para a nuvem.</span></div>
+    <div class="info-box"><b>Conferência automática</b><span>Além da fila de movimentações, o sistema agora compara o estado das cartelas na nuvem com o banco local e corrige divergências recuperáveis sem apagar vendas locais.</span></div>
     <div class="info-box"><b>Sem internet</b><span>O sorteio, telão, conferência, relatórios e banco local continuam funcionando normalmente.</span></div>
   </div>
 </section>
