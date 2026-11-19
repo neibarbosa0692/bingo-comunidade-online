@@ -776,9 +776,14 @@ def _sync_reconciliar_estado(remote, token):
     ).fetchall()}
     conn.close()
 
-    resp=_http_json('GET',f"{remote}/api/sync/state?evento_id={eid}",None,token,timeout=30)
+    try:
+        resp=_http_json('GET',f"{remote}/api/sync/state?evento_id={eid}",None,token,timeout=30)
+    except Exception as exc:
+        return {'ok':True,'checked':0,'fixed':0,'conflicts':[],
+                'warning':f'Conferência de estado indisponível: {exc}'}
     if not resp.get('ok'):
-        raise RuntimeError(resp.get('message') or 'Falha ao consultar estado da nuvem.')
+        return {'ok':True,'checked':0,'fixed':0,'conflicts':[],
+                'warning':f"Conferência de estado indisponível: {resp.get('message') or resp.get('error') or 'servidor não respondeu corretamente.'}"}
     remotos=resp.get('cartelas') or []
     conflitos=[]
     corrigidas=0
@@ -890,7 +895,10 @@ def sync_cycle(full=False):
         conflitos=(conflitos_push or [])+(conflitos_pull or [])
         reconciliacao=_sync_reconciliar_estado(remote,token)
         conflitos+=(reconciliacao.get('conflicts') or [])
+        aviso=reconciliacao.get('warning')
         msg=f"Online. {enviados} movimento(s) enviados; {recebidos} recebido(s); {reconciliacao.get('fixed',0)} divergência(s) corrigida(s)."
+        if aviso:
+            msg += " " + aviso
         if conflitos: msg += f" {len(conflitos)} conflito(s): " + '; '.join(str(x) for x in conflitos[:3])
         _sync_atualizar_status(not conflitos,msg,catalog=catalog)
         return {'ok':not conflitos,'message':msg,'conflicts':conflitos,'sent':enviados,'received':recebidos}
