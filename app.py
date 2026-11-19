@@ -755,11 +755,10 @@ def _sync_pull_eventos(remote, token):
         ok,msg=_aplicar_movimento_recebido(conn,payload,ev.get('origem') or 'nuvem')
         if ok: aplicados+=1
         else: conflitos.append(msg)
-    # Mantém o cursor em eventos conflitantes para não perder a oportunidade de reaplicá-los.
+    # Se houver conflito, não avançamos o cursor: os eventos serão reapresentados
+    # na próxima tentativa depois da reconciliação. Eventos já aplicados são idempotentes.
     if conflitos:
-        seqs=[int(ev.get('seq') or 0) for ev in eventos]
-        if seqs:
-            max_seq=min(max_seq, max(seqs)-len(conflitos))
+        max_seq=since
     conn.execute("UPDATE sync_config SET last_pull_seq=? WHERE id=1",(max_seq,)); conn.commit(); conn.close()
     return aplicados, conflitos
 
