@@ -1334,6 +1334,7 @@ ENDPOINT_PERMISSAO = {
     'usuarios':'usuarios','usuario_acao':'usuarios',
     'auditoria':'auditoria',
     'sincronizacao':'sincronizacao','sincronizacao_acao':'sincronizacao',
+    'pos_bingo_admin':'rodadas',
 }
 
 PUBLIC_ENDPOINTS = {
