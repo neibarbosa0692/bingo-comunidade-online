@@ -1,0 +1,29 @@
+BINGO COMUNIDADE V11 - HÍBRIDO ONLINE + OFFLINE
+================================================
+
+1) Para usar no computador do bingo:
+   Execute INICIAR_BINGO.bat
+
+2) O sistema LOCAL funciona mesmo sem internet.
+   Sorteio, telão, conferência, relatórios e banco SQLite ficam no computador.
+
+3) Para vendedores venderem de qualquer lugar:
+   É necessário hospedar a parte ONLINE descrita em DEPLOY_ONLINE.md.
+
+4) Depois de hospedar:
+   Abra o menu Online / Offline no computador local e configure:
+   - URL do servidor online
+   - chave secreta de sincronização
+   - sincronização automática
+
+5) Distribua lotes exclusivos aos vendedores.
+   Cada vendedor recebe um código de 6 dígitos e um QR privado.
+
+6) Antes do sorteio:
+   Menu Online / Offline -> Encerrar vendas / Preparar sorteio.
+
+IMPORTANTE:
+- Não dependa somente da nuvem.
+- Não apague o bingo.db local.
+- Faça backup antes do evento.
+- O template PNG oficial da cartela continua preservado nesta versão.

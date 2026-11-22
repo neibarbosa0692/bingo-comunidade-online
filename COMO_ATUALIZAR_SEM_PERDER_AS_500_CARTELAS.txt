@@ -1,0 +1,20 @@
+BINGO COMUNIDADE V11.5 — ATUALIZAÇÃO PWA + EXE
+
+ATENÇÃO: ESTE PACOTE NÃO CONTÉM bingo.db.
+Isso é proposital para não substituir as 500 cartelas oficiais já geradas no seu computador.
+
+ANTES DE ATUALIZAR:
+1. Feche o Bingo Comunidade.
+2. Faça uma cópia do seu arquivo bingo.db atual em outro local.
+3. Extraia este ZIP por cima da pasta atual do programa, permitindo substituir os arquivos de código.
+4. NÃO apague nem troque o bingo.db que já está na sua pasta.
+
+PWA:
+Depois da atualização, o sistema passa a fornecer manifest e service worker. No servidor online (HTTPS) e em localhost, navegadores compatíveis podem instalar o Bingo Comunidade como aplicativo.
+
+EXE:
+No Windows, execute GERAR_EXE_WINDOWS.bat. Ao terminar, será criada a pasta dist com:
+- Bingo Comunidade.exe
+- bingo.db (cópia do banco que estava na pasta no momento da compilação)
+
+Confirme que o banco oficial está correto antes de passar a usar a pasta dist.

@@ -1,0 +1,8 @@
+BINGO COMUNIDADE V11.5.1
+
+- Um clique no atalho inicia o servidor local silenciosamente e abre o sistema no navegador.
+- Se o servidor já estiver ativo, outro clique apenas abre o sistema novamente.
+- A central administrativa não aparece no uso normal.
+- O bingo.db oficial NÃO está incluído neste pacote.
+- Mantenha e faça backup do seu bingo.db que contém as 500 cartelas oficiais.
+- Para gerar o novo EXE no Windows, execute GERAR_EXE_WINDOWS.bat.

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Editar evento • Bingo Comunidade{% endblock %}
+{% block page_title %}Editar Evento{% endblock %}
+{% block content %}
+<div class="panel narrow">
+  <div class="panel-head"><div><span class="eyebrow">EVENTO #{{ alvo.id }}</span><h3>{{ alvo.nome }}</h3></div><a class="btn" href="{{ url_for('eventos') }}">← Voltar</a></div>
+  <form method="post" class="form-grid">
+    <label>Nome do evento<input name="nome" value="{{ alvo.nome }}" required></label>
+    <label>Data<input type="date" name="data" value="{{ alvo.data or '' }}"></label>
+    <label>Valor da cartela (R$)<input name="valor_cartela" value="{{ '%.2f'|format(alvo.valor_cartela) }}"></label>
+    <label>Endereço para celulares<input name="url_rede" value="{{ alvo.url_rede or '' }}" placeholder="Ex.: http://192.168.0.10:8765"></label>
+    <label style="grid-column:1/-1">Organizador exibido na cartela<input name="organizador_cartela" value="{{ alvo.organizador_cartela or 'Comunidade Jesus Misericordioso' }}"></label>
+    <label style="grid-column:1/-1">Horário / observação do sorteio<input name="horario_cartela" value="{{ alvo.horario_cartela or 'Após a Santa Missa das 18h' }}"></label>
+    <label style="grid-column:1/-1">Prêmios impressos na cartela
+      <textarea name="premios_cartela" rows="6" placeholder="Um prêmio por linha">{{ alvo.premios_cartela or '' }}</textarea>
+      <span class="hint">O modelo personalizado exibe até 5 prêmios, na ordem informada.</span>
+    </label>
+    <div class="form-actions"><button class="btn btn-primary">Salvar alterações</button></div>
+  </form>
+  <div class="info-box v7-edit-warning"><b>Atenção</b><span>Alterar o valor da cartela modifica os cálculos financeiros do evento. Se já houver vendas, confira os relatórios após a alteração.</span></div>
+</div>
+{% endblock %}

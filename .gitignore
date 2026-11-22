@@ -1,0 +1,40 @@
+# Banco de dados local
+bingo
+*.db
+*.sqlite
+*.sqlite3
+
+# Chaves e segredos
+.secret_key
+.env
+.env.*
+!.env.example
+
+# Ambiente Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Backups locais
+backups/
+backups_testes/
+
+# Arquivos de build
+build/
+dist/
+
+# Executáveis gerados
+*.exe
+
+# Arquivos temporários
+*.tmp
+*.log
+
+# Configurações locais
+.porta_ativa
+.porta_ativa.txt
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db

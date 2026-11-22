@@ -1,0 +1,18 @@
+BINGO COMUNIDADE V11.6 - REDE LOCAL
+
+NOTEBOOK PRINCIPAL
+1. Use "Bingo Comunidade.exe" no computador que possui o bingo.db oficial.
+2. Este pacote NAO contem bingo.db.
+3. O banco oficial continua somente no notebook principal.
+4. Ao fechar a janela principal, o servidor continua ativo em segundo plano para Coordenacao, telao e celulares.
+5. Para encerrar totalmente o servidor, execute "Bingo Comunidade.exe --central" e clique em Encerrar servidor.
+
+NOTEBOOK DA COORDENACAO
+1. Copie apenas "Bingo Comunidade - Coordenacao.exe" para o segundo notebook.
+2. Ele NAO usa bingo.db local.
+3. Os dois notebooks devem estar na mesma rede Wi-Fi/LAN.
+4. O cliente procura automaticamente o notebook principal.
+5. Se o Windows Firewall perguntar, permita acesso em redes PRIVADAS.
+
+SEGURANCA
+Faca backup do bingo.db oficial antes de atualizar o EXE do notebook principal.

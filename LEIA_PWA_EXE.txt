@@ -1,0 +1,21 @@
+BINGO COMUNIDADE — PWA + EXE
+
+1. PWA
+O sistema agora possui manifest, ícones e service worker. Em HTTPS (servidor online) ou localhost, navegadores compatíveis podem instalar o Bingo Comunidade como aplicativo.
+
+O service worker NÃO armazena vendas, sorteios, APIs, PDFs nem dados operacionais em cache. Isso é proposital para evitar dados antigos em operações críticas.
+
+2. EXE WINDOWS
+Execute GERAR_EXE_WINDOWS.bat em um computador Windows com Python instalado. O processo cria dist\Bingo Comunidade.exe e copia o bingo.db atual para a mesma pasta.
+
+IMPORTANTE — 500 CARTELAS OFICIAIS
+Não substitua o seu bingo.db atual por um banco vindo deste pacote. As 500 cartelas que você gerou estão no bingo.db do SEU computador. Faça uma cópia de segurança desse arquivo antes de qualquer atualização.
+
+Para migrar para o EXE sem perder as cartelas:
+- mantenha o bingo.db atual;
+- coloque os novos arquivos do programa na mesma pasta (sem sobrescrever o banco);
+- gere o EXE nessa pasta;
+- confirme que dist\bingo.db tem o mesmo tamanho/data do banco oficial antes de começar a usar.
+
+3. ACESSO
+Ao abrir o EXE, uma central mostra o status do servidor e botões para Sistema, Cartelas, Telão e Backups. O banco fica ao lado do EXE, não dentro dele.

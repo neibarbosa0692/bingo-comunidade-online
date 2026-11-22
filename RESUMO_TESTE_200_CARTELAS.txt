@@ -1,0 +1,26 @@
+BINGO COMUNIDADE - RESUMO DO TESTE AUTOMATIZADO
+
+Evento: TESTE AUTOMATIZADO - 200 CARTELAS
+Cartelas: 200
+Lotes: 20 (10 cartelas por lote)
+Vendedores: 10 (20 cartelas por vendedor)
+Valor da cartela: R$ 15.00
+
+RODADAS:
+1. 1ª Rodada - 1 linha | padrão=linha | prêmio=R$ 100.00
+2. 2ª Rodada - 2 linhas | padrão=duas_linhas | prêmio=R$ 150.00
+3. 3ª Rodada - 4 cantos | padrão=quatro_cantos | prêmio=R$ 200.00
+4. 4ª Rodada - X completo | padrão=x | prêmio=R$ 250.00
+5. 5ª Rodada - Cartela cheia | padrão=cartela_cheia | prêmio=R$ 500.00
+
+VENDEDORES / CÓDIGOS:
+TESTE - Vendedor 01 | código 618111 | cartelas 0001-0010, 0011-0020
+TESTE - Vendedor 02 | código 672734 | cartelas 0021-0030, 0031-0040
+TESTE - Vendedor 03 | código 444366 | cartelas 0041-0050, 0051-0060
+TESTE - Vendedor 04 | código 747874 | cartelas 0061-0070, 0071-0080
+TESTE - Vendedor 05 | código 711013 | cartelas 0081-0090, 0091-0100
+TESTE - Vendedor 06 | código 475912 | cartelas 0101-0110, 0111-0120
+TESTE - Vendedor 07 | código 334056 | cartelas 0121-0130, 0131-0140
+TESTE - Vendedor 08 | código 715481 | cartelas 0141-0150, 0151-0160
+TESTE - Vendedor 09 | código 429091 | cartelas 0161-0170, 0171-0180
+TESTE - Vendedor 10 | código 531774 | cartelas 0181-0190, 0191-0200

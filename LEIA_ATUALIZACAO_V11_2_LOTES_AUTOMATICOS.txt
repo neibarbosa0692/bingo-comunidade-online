@@ -1,0 +1,18 @@
+BINGO COMUNIDADE V11.2 - LOTES AUTOMÁTICOS
+
+ALTERAÇÕES:
+- Ao gerar cartelas, o sistema cria os lotes automaticamente.
+- Cada lote recebe até 10 cartelas.
+- Exemplo: 100 cartelas = 10 lotes de 10.
+- Códigos automáticos: LOTE-001, LOTE-002, LOTE-003...
+- A distribuição para os vendedores continua manual na tela Estoque.
+- A montagem manual de lotes foi removida da interface de Estoque.
+- O símbolo # foi removido da frente dos números das cartelas em telas, telão, celular, vendas, busca, sorteio e comprovante.
+- Mantidos Online + Offline, sincronização e Horário de Brasília.
+
+ATUALIZAÇÃO ONLINE:
+Substitua app.py e a pasta templates no GitHub e faça commit na main.
+
+ATUALIZAÇÃO LOCAL:
+Feche o Bingo e substitua app.py e a pasta templates na pasta local.
+Mantenha o seu bingo.db.

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920,height=1080,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Overlay Bingo • OBS</title>
+<style>
+:root{
+  --white:#fff;--muted:rgba(255,255,255,.70);--soft:rgba(255,255,255,.12);
+  --glass:rgba(8,13,24,.76);--glass2:rgba(7,12,22,.88);--line:rgba(255,255,255,.16);
+  --green:#35d07f;--green2:#19a765;--gold:#ffd166;--red:#ff5b6e;
+  --shadow:0 18px 60px rgba(0,0,0,.42)
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;color:var(--white);font-family:Inter,Segoe UI,Arial,sans-serif}
+body{position:relative}
+#app{position:absolute;inset:0;pointer-events:none}
+
+/* Cabeçalho */
+.header{position:absolute;left:52px;right:52px;top:38px;display:flex;align-items:flex-start;justify-content:space-between;gap:28px}
+.identity{display:flex;align-items:center;gap:16px;text-shadow:0 4px 18px rgba(0,0,0,.55)}
+.live{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:999px;background:rgba(220,35,57,.92);font-size:12px;font-weight:900;letter-spacing:1.6px;box-shadow:0 8px 28px rgba(220,35,57,.28)}
+.live i{width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 10px #fff;animation:pulse 1.4s infinite}
+.brand{font-size:28px;font-weight:950;letter-spacing:.8px}
+.event{margin-top:4px;font-size:15px;font-weight:650;color:var(--muted);max-width:700px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Número atual */
+.current{display:flex;align-items:center;gap:18px;padding:11px 18px 11px 12px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,rgba(5,10,20,.82),rgba(11,25,40,.72));box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.current-label{font-size:11px;font-weight:900;letter-spacing:1.7px;color:var(--muted);text-align:right;line-height:1.35}
+.current-label strong{display:block;color:var(--white);font-size:13px;letter-spacing:.8px}
+.ball-current{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 35% 28%,#fff 0 5%,#8ff0ba 7%,#35d07f 32%,#15804f 100%);color:#04170d;border:3px solid rgba(255,255,255,.82);box-shadow:0 0 0 7px rgba(53,208,127,.10),0 0 45px rgba(53,208,127,.30),inset -10px -14px 20px rgba(0,0,0,.16)}
+.ball-current .letter{position:absolute;top:10px;font-size:15px;font-weight:1000;opacity:.78}
+.ball-current .number{font-size:44px;line-height:1;font-weight:1000;margin-top:13px}
+
+/* Faixa inferior */
+.bottom{position:absolute;left:52px;right:52px;bottom:38px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px}
+.history{padding:15px 18px 17px;border:1px solid var(--line);border-radius:20px;background:var(--glass);box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.section-title{font-size:10px;font-weight:950;letter-spacing:1.7px;color:var(--muted);margin:0 0 10px 2px}
+.balls{display:flex;gap:9px}
+.ball{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.18);font-size:17px;font-weight:950;box-shadow:inset 0 0 14px rgba(255,255,255,.03)}
+.ball.last{width:56px;height:56px;margin-top:-4px;background:linear-gradient(145deg,#43dd8a,#168a55);border:2px solid rgba(255,255,255,.72);color:#04170d;font-size:20px;box-shadow:0 0 25px rgba(53,208,127,.28)}
+
+.near{display:flex;gap:10px}
+.near-card{min-width:150px;padding:13px 15px;border:1px solid var(--line);border-radius:17px;background:var(--glass);box-shadow:var(--shadow);backdrop-filter:blur(10px)}
+.near-card h3{margin:0;font-size:10px;font-weight:950;letter-spacing:1.4px;color:var(--muted)}
+.near-card .count{font-size:28px;font-weight:1000;line-height:1.05;margin-top:5px}
+.near-card .label{font-size:10px;color:rgba(255,255,255,.48);margin-top:2px}
+.near-card.n3{border-color:rgba(255,209,102,.38)}
+.near-card.n2{border-color:rgba(255,151,77,.42)}
+.near-card.n1{border-color:rgba(255,91,110,.48)}
+.near-card.n1 .count{color:#ff8c9a}
+.near-list{font-size:10px;color:var(--muted);margin-top:6px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Vencedor */
+#winner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(1,5,12,.78);backdrop-filter:blur(12px)}
+#winner.show{display:flex;animation:winnerIn .35s cubic-bezier(.2,.8,.2,1)}
+.winner-wrap{width:min(1180px,82vw);position:relative;padding:4px}
+.winner-card{position:relative;overflow:hidden;padding:58px 72px 64px;text-align:center;border:1px solid rgba(255,255,255,.24);border-radius:34px;background:linear-gradient(145deg,rgba(7,18,31,.97),rgba(8,38,28,.96));box-shadow:0 30px 110px rgba(0,0,0,.62)}
+.winner-card:before{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at 50% 30%,rgba(53,208,127,.16),transparent 42%);pointer-events:none}
+.winner-kicker{position:relative;font-size:14px;font-weight:950;letter-spacing:4px;color:var(--green);text-transform:uppercase}
+.winner-title{position:relative;margin:9px 0 2px;font-size:82px;line-height:1;font-weight:1000;letter-spacing:-2px;text-shadow:0 8px 34px rgba(0,0,0,.48)}
+.winner-round{position:relative;font-size:20px;font-weight:700;color:var(--muted);margin-top:9px}
+.winner-list{position:relative;display:flex;justify-content:center;gap:14px;flex-wrap:wrap;margin:30px auto 0;max-width:1000px}
+.winner-person{min-width:270px;padding:16px 20px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);text-align:left}
+.winner-person .cardno{font-size:12px;font-weight:950;letter-spacing:1.3px;color:var(--green);text-transform:uppercase}
+.winner-person .name{font-size:25px;font-weight:950;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-prize{position:relative;margin-top:25px;font-size:18px;color:var(--muted);font-weight:650}
+.winner-prize strong{color:var(--gold);font-size:23px}
+
+@keyframes winnerIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.78)}}
+@media(max-width:1250px){.header,.bottom{left:30px;right:30px}.brand{font-size:23px}.ball-current{width:78px;height:78px}.ball-current .number{font-size:36px}.near-card{min-width:125px}.winner-title{font-size:64px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="header">
+    <div class="identity">
+      <span class="live"><i></i> AO VIVO</span>
+      <div><div class="brand">BINGO COMUNIDADE</div><div id="event" class="event">Carregando evento...</div></div>
+    </div>
+    <div class="current">
+      <div class="current-label">NÚMERO<br><strong>CHAMADO</strong></div>
+      <div class="ball-current"><span id="letter" class="letter">—</span><span id="current" class="number">—</span></div>
+    </div>
+  </header>
+
+  <footer class="bottom">
+    <section class="history">
+      <div class="section-title">ÚLTIMOS NÚMEROS</div>
+      <div id="balls" class="balls"></div>
+    </section>
+    <section class="near">
+      <div class="near-card n3"><h3>FALTAM 3</h3><div id="n3" class="count">0</div><div class="label">cartelas</div><div id="n3list" class="near-list">Nenhuma</div></div>
+      <div class="near-card n2"><h3>FALTAM 2</h3><div id="n2" class="count">0</div><div class="label">cartelas</div><div id="n2list" class="near-list">Nenhuma</div></div>
+      <div class="near-card n1"><h3>FALTA 1</h3><div id="n1" class="count">0</div><div class="label">cartelas</div><div id="n1list" class="near-list">Nenhuma</div></div>
+    </section>
+  </footer>
+</div>
+
+<div id="winner">
+  <div class="winner-wrap">
+    <div class="winner-card">
+      <div class="winner-kicker">🎉 BINGO CONFIRMADO</div>
+      <div class="winner-title">TEMOS UM VENCEDOR!</div>
+      <div id="winnerRound" class="winner-round"></div>
+      <div id="winnerList" class="winner-list"></div>
+      <div id="winnerPrize" class="winner-prize"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API='/api/estado-sorteio';
+let lastWinnerSignature=null,winnerTimer=null;
+const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const money=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+function render(d){
+  document.getElementById('event').textContent=d.evento||'';
+  document.getElementById('current').textContent=d.ultimo??'—';
+  document.getElementById('letter').textContent=d.letra||'—';
+  const nums=(d.ultimos||[]).slice(0,7);
+  document.getElementById('balls').innerHTML=nums.length
+    ? nums.map((n,i)=>`<div class="ball ${i===0?'last':''}">${esc(n)}</div>`).join('')
+    : '<div class="ball">—</div>';
+  for(const k of [3,2,1]){
+    const g=(d.proximas||{})[String(k)]||{total:0,cartelas:[]};
+    document.getElementById('n'+k).textContent=g.total;
+    document.getElementById('n'+k+'list').textContent=g.cartelas?.length
+      ? g.cartelas.map(x=>`#${String(x.numero).padStart(3,'0')}`).join(' • ')
+      : 'Nenhuma';
+  }
+  const winners=d.ganhadores||[];
+  const signature=winners.map(x=>`${x.id}:${x.numero}:${x.comprador||''}`).join('|');
+  if(winners.length && signature!==lastWinnerSignature){
+    lastWinnerSignature=signature;
+    showWinner(winners);
+  }
+}
+function showWinner(winners){
+  clearTimeout(winnerTimer);
+  const w=document.getElementById('winner');
+  const latest=winners[winners.length-1];
+  document.getElementById('winnerRound').textContent=latest.rodada||'Prêmio confirmado';
+  document.getElementById('winnerList').innerHTML=winners.map(x=>`
+    <div class="winner-person">
+      <div class="cardno">CARTELA ${String(x.numero).padStart(3,'0')}</div>
+      <div class="name">${esc(x.comprador||'Comprador não informado')}</div>
+    </div>`).join('');
+  const prizes=[...new Set(winners.map(x=>Number(x.premio||0)).filter(x=>x>0))];
+  document.getElementById('winnerPrize').innerHTML=prizes.length
+    ? `Prêmio: <strong>${prizes.map(money).join(' • ')}</strong>`
+    : '';
+  w.classList.add('show');
+  winnerTimer=setTimeout(()=>w.classList.remove('show'),30000);
+}
+async function poll(){
+  try{
+    const r=await fetch(API,{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    render(await r.json());
+  }catch(e){
+    /* Overlay transparente: não exibe mensagem de erro na transmissão. */
+  }finally{setTimeout(poll,800)}
+}
+poll();
+</script>
+</body>
+</html>

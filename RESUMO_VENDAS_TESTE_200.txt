@@ -1,0 +1,29 @@
+BINGO COMUNIDADE - RESUMO DAS VENDAS DE TESTE
+
+Evento: TESTE AUTOMATIZADO - 200 CARTELAS
+200 de 200 cartelas vendidas
+Dinheiro: 80 cartelas = R$ 1200.00
+PIX: 80 cartelas = R$ 1200.00
+Outros: 40 cartelas = R$ 600.00
+TOTAL REGISTRADO: R$ 3000.00
+
+POR VENDEDOR:
+TESTE - Vendedor 01: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 02: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 03: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 04: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 05: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 06: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 07: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 08: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 09: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+TESTE - Vendedor 10: 20 vendas | Dinheiro 8 | PIX 8 | Outros 4
+
+Estado final:
+- vendas fechadas
+- evento em andamento
+- primeira rodada ativa
+- sorteio zerado
+- backup pré-sorteio: pre_sorteio_teste_200_evento_2_20260906_211053.db
+
+Se usa o Railway, abra Online + Offline e clique em Sincronizar agora antes do sorteio.

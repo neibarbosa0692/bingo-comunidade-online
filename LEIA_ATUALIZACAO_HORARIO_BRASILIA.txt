@@ -1,0 +1,9 @@
+ATUALIZAÇÃO V11.1 — HORÁRIO DE BRASÍLIA
+
+- Novos registros passam a ser gravados com fuso UTC-03:00.
+- Datas exibidas no sistema usam DD/MM/AAAA HH:MM:SS (Brasília).
+- Registros antigos vindos da nuvem (Railway), que eram UTC sem offset, são convertidos para Brasília ao exibir.
+- A correção deve ser aplicada tanto no GitHub/Railway quanto no computador local.
+
+No GitHub, substitua app.py e a pasta templates pelos arquivos desta versão e faça commit na branch main.
+No computador local, feche o Bingo e substitua os mesmos arquivos antes de iniciar novamente.

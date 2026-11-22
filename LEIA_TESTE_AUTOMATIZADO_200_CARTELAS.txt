@@ -1,0 +1,55 @@
+BINGO COMUNIDADE - TESTE AUTOMATIZADO COM 200 CARTELAS
+
+IMPORTANTE: para maior segurança, feche o Bingo antes de executar os scripts.
+Os scripts criam backups automáticos antes de alterar o banco.
+
+PASSO 1
+Dê dois cliques em:
+01_PREPARAR_TESTE_200_CARTELAS.bat
+
+Ele prepara automaticamente:
+- evento: TESTE AUTOMATIZADO - 200 CARTELAS;
+- 200 cartelas únicas;
+- 20 lotes de 10 cartelas;
+- 10 vendedores de teste;
+- 20 cartelas para cada vendedor (2 lotes cada);
+- 5 rodadas com prêmios;
+- primeira rodada ativa;
+- cartelas/lotes marcados como impressos/distribuídos para completar o checklist do teste.
+
+Se a nuvem estiver configurada, o script pergunta se deseja zerar os dados de teste online.
+Só ocorre limpeza online se você digitar exatamente ZERAR NUVEM.
+
+PASSO 2
+Dê dois cliques em:
+02_SIMULAR_VENDAS_200_CARTELAS.bat
+
+Ele simula 200 vendas:
+- 80 em Dinheiro;
+- 80 em PIX;
+- 40 em Outros.
+
+Por vendedor (20 cartelas):
+- 8 Dinheiro;
+- 8 PIX;
+- 4 Outros.
+
+Com cartela a R$ 15,00, o teste deve registrar:
+- Dinheiro: R$ 1.200,00;
+- PIX: R$ 1.200,00;
+- Outros: R$ 600,00;
+- Total: R$ 3.000,00.
+
+No final o segundo script:
+- fecha as vendas;
+- deixa o evento em andamento;
+- deixa a 1ª rodada ativa;
+- zera o sorteio e ganhadores;
+- cria backup pré-sorteio;
+- se a sincronização estiver configurada, pergunta se deseja sincronizar tudo com o Railway.
+
+Depois disso, basta abrir o sistema e ir ao menu SORTEIO.
+
+OBSERVAÇÃO
+Os scripts recriam somente o evento de teste com nome exato
+TESTE AUTOMATIZADO - 200 CARTELAS. Eventos reais são preservados.

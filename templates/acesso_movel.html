@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block page_title %}Acesso pelos Celulares{% endblock %}
+{% block content %}
+<section class="mobile-access-hero">
+  <div><span class="pill">ONLINE + REDE LOCAL</span><h2>Venda pelo celular de qualquer lugar</h2><p>Com o servidor online configurado, os vendedores podem registrar vendas pela internet. No local do bingo, a rede local continua disponível mesmo sem internet.</p></div>
+  <div class="network-url"><span>ENDEREÇO LOCAL</span><strong>{{ base_url }}</strong><small>IP detectado: {{ ip }}</small>{% if online_url %}<span style="margin-top:10px">ENDEREÇO ONLINE</span><strong>{{ online_url }}</strong>{% endif %}</div>
+</section>
+<section class="grid-2">
+  <div class="panel qr-access-panel">
+    <span class="eyebrow">ACESSO LOCAL</span><h3>Área móvel no Wi‑Fi do evento</h3>
+    <img src="{{ url_for('acesso_movel_qr') }}" alt="QR acesso móvel" class="big-qr">
+    <p class="muted">Este QR funciona quando o celular está na mesma rede Wi‑Fi do notebook.</p>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">SEGURANÇA DE CONTINGÊNCIA</span><h3>Cada vendedor só baixa o próprio lote</h3>
+    <div class="info-box"><b>1. Lotes exclusivos</b><span>Cartelas atribuídas a um vendedor não podem ser vendidas pelo balcão local enquanto estiverem com ele.</span></div>
+    <div class="info-box"><b>2. Código individual</b><span>Cada vendedor recebe um código de 6 dígitos e um QR privado de acesso.</span></div>
+    <div class="info-box"><b>3. Queda de internet</b><span>O computador continua com sorteio, telão e conferência. As vendas remotas voltam a sincronizar quando a conexão retornar.</span></div>
+  </div>
+</section>
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">ACESSO ONLINE POR VENDEDOR</span><h3>QR e código individual</h3></div></div>
+  {% if not online_url %}<div class="flash warning">Configure primeiro o endereço do servidor online no menu <b>Online / Offline</b>. Enquanto isso, os códigos podem ser usados apenas na rede local.</div>{% endif %}
+  <div class="seller-mobile-grid">
+    {% for v in vendedores %}
+    <div class="seller-mobile-card"><img src="{{ url_for('vendedor_acesso_qr', vendedor_id=v.id) }}" alt="QR {{ v.nome }}"><div><strong>{{ v.nome }}</strong><span>{{ v.telefone or 'Sem telefone' }}</span><small>Código de acesso: <b class="access-code">{{ v.codigo_acesso }}</b></small><small>Entregue este QR/código somente ao vendedor.</small></div></div>
+    {% else %}<p class="muted">Cadastre vendedores primeiro.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

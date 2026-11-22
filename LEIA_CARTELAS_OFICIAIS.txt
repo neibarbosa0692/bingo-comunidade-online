@@ -1,0 +1,21 @@
+BINGO COMUNIDADE V11.4.1 - PROTEÇÃO DAS CARTELAS OFICIAIS
+
+Esta versão adiciona uma proteção de integridade no banco de dados local/offline.
+
+Depois que uma cartela é gerada, sua grade numérica fica bloqueada contra alterações futuras.
+Isso garante que uma cartela física já impressa continue correspondendo exatamente ao registro do sistema.
+
+O sistema continua permitindo:
+- gerar novas cartelas normalmente;
+- continuar a numeração a partir da última cartela existente;
+- criar automaticamente lotes de 10 cartelas;
+- vender, distribuir, inutilizar e conferir cartelas;
+- marcar lotes como impressos;
+- gerar novos lotes posteriormente, caso as primeiras 500 acabem.
+
+Recomendação para a primeira tiragem oficial:
+1. Gerar primeiro 10 cartelas (0001 a 0010).
+2. Gerar o PDF e conferir visualmente.
+3. Testar o QR Code.
+4. Estando tudo correto, gerar as demais cartelas até completar 500.
+5. Fazer backup do banco de dados após a geração oficial.

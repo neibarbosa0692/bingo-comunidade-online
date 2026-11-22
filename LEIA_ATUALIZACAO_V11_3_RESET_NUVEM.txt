@@ -1,0 +1,11 @@
+BINGO COMUNIDADE V11.3 - RESET SEGURO DA NUVEM
+
+Nova função em Online + Offline (somente Administrador):
+- botão "Zerar dados de teste da nuvem";
+- exige digitar ZERAR NUVEM;
+- apaga cartelas, lotes, vendas/estornos, sorteios, ganhadores e filas de sincronização somente no servidor online;
+- preserva evento, vendedores, QR/códigos e configurações;
+- cria backup automático no volume Railway em /data/backups_cloud antes de apagar;
+- reinicia o cursor local de sincronização para eliminar conflitos antigos.
+
+IMPORTANTE: atualizar app.py e templates/sincronizacao.html tanto no computador local quanto no GitHub/Railway.

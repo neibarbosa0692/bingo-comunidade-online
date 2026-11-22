@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Backup • Bingo Comunidade{% endblock %}
+{% block page_title %}Backup e Restauração{% endblock %}
+{% block content %}
+<section class="grid-2">
+  <div class="panel backup-main-v4">
+    <span class="eyebrow">SEGURANÇA DOS DADOS</span><h3>Criar backup agora</h3>
+    <p class="muted">O backup inclui eventos, cartelas, vendas, vendedores, sorteios, rodadas, ganhadores e acertos financeiros.</p>
+    <form action="{{ url_for('backup_criar') }}" method="post"><button class="btn btn-primary btn-xl">Criar cópia de segurança</button></form>
+  </div>
+  <div class="panel">
+    <span class="eyebrow">IMPORTAR</span><h3>Adicionar arquivo de backup</h3>
+    <form action="{{ url_for('backup_upload') }}" method="post" enctype="multipart/form-data" class="form-stack"><label>Arquivo .db<input type="file" name="arquivo" accept=".db" required></label><button class="btn">Importar para a lista</button></form>
+    <p class="muted">Importar não altera o sistema imediatamente. Depois você escolhe quando restaurar.</p>
+  </div>
+</section>
+
+<div class="panel">
+  <div class="panel-head"><div><span class="eyebrow">HISTÓRICO</span><h3>Backups disponíveis</h3></div><span class="badge">{{ backups|length }} arquivo(s)</span></div>
+  <div class="backup-list-v4">
+    {% for b in backups %}
+    <div class="backup-row-v4"><div class="backup-icon-v4">DB</div><div><strong>{{ b.nome }}</strong><span>{{ b.data }} • {{ '%.1f'|format(b.tamanho/1024) }} KB</span></div><div class="backup-actions-v4"><a class="btn" href="{{ url_for('backup_download', nome=b.nome) }}">Baixar</a><form action="{{ url_for('backup_restaurar', nome=b.nome) }}" method="post" onsubmit="return confirm('Restaurar este backup? O sistema fará uma cópia do banco atual antes da restauração.')"><button class="btn btn-danger">Restaurar</button></form></div></div>
+    {% else %}<p class="muted">Nenhum backup criado ainda.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="info-box backup-warning-v4"><b>Recomendação</b><span>Crie um backup antes do início do bingo e outro logo após encerrar o evento. Também é recomendável baixar uma cópia para um pendrive ou outro computador.</span></div>
+{% endblock %}

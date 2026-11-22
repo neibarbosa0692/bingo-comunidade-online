@@ -1,0 +1,8 @@
+BINGO COMUNIDADE V11.4
+
+Atualizações:
+1. Página do vendedor ajustada para telas móveis mais largas, incluindo iPhone e Androids em que o resumo ficava espremido.
+2. Ao iniciar o evento, o operador escolhe entre Sorteador do sistema e Globo físico. No modo Globo físico, o botão “Sortear número” fica oculto e o servidor também bloqueia o sorteio automático.
+3. Telão: números do painel em 20px, demais textos ampliados proporcionalmente, removidos “Faltam 5” e “Faltam 4” e adicionada lista permanente de ganhadores confirmados.
+
+A migração do banco adiciona automaticamente o campo modo_sorteio à tabela eventos.
