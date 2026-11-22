@@ -173,5 +173,48 @@ def install(bingo):
             return response
         bingo.app._post_bingo_html=True
 
-    # V2 pós-bingo: reconstrução manual segura para eventos já encerrados.\n    # Não altera cartelas, vendas, sorteios ou ganhadores; apenas registra o snapshot histórico.\n    def _normalizar_numeros_historico(raw):\n        vals=[]\n        for parte in str(raw or '').replace(';',',').replace('\\n',',').split(','):\n            parte=parte.strip()\n            if not parte: continue\n            try: n=int(parte)\n            except ValueError: continue\n            if 1 <= n <= 75 and n not in vals: vals.append(n)\n        return vals\n\n    @bingo.app.route('/pos-bingo', methods=['GET','POST'])\n    def pos_bingo_admin():\n        conn=bingo.get_db(); evento=bingo.evento_ativo(conn)\n        if not evento:\n            conn.close(); return 'Nenhum evento ativo.', 404\n        if request.method=='POST':\n            rodada_id=int(request.form.get('rodada_id') or 0)\n            rodada=conn.execute('SELECT * FROM rodadas WHERE id=? AND evento_id=?',(rodada_id,evento['id'])).fetchone()\n            if not rodada:\n                conn.close(); return 'Rodada não encontrada.',404\n            nums=_normalizar_numeros_historico(request.form.get('numeros',''))\n            if not nums:\n                conn.close(); return 'Informe pelo menos um número sorteado.',400\n            conn.execute('''INSERT INTO resultado_rodadas (evento_id,rodada_id,nome,padrao,premio,numeros_json,finalizada_em)\n                VALUES (?,?,?,?,?,?,?) ON CONFLICT(evento_id,rodada_id) DO UPDATE SET\n                nome=excluded.nome,padrao=excluded.padrao,premio=excluded.premio,\n                numeros_json=excluded.numeros_json,finalizada_em=excluded.finalizada_em''',\n                (evento['id'],rodada['id'],rodada['nome'],rodada['padrao'],float(rodada['premio'] or 0),json.dumps(nums),request.form.get('finalizada_em') or bingo.iso_brasilia()))\n            conn.commit()\n        rodadas=conn.execute('SELECT r.*,h.numeros_json,h.finalizada_em historico_em FROM rodadas r LEFT JOIN resultado_rodadas h ON h.rodada_id=r.id AND h.evento_id=r.evento_id WHERE r.evento_id=? ORDER BY r.ordem,r.id',(evento['id'],)).fetchall()\n        conn.close()\n        linhas=[]\n        for r in rodadas:\n            nums=json.loads(r['numeros_json'] or '[]') if r['numeros_json'] else []\n            linhas.append(f'''<section style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 16px rgba(15,23,42,.06)"><h2 style="margin:0 0 6px">{r['ordem']}ª — {r['nome']}</h2><p style="margin:0 0 12px;color:#64748b">{bingo.padrao_label(r['padrao'])} • Prêmio: R$ {float(r['premio'] or 0):.2f}</p><form method="post"><input type="hidden" name="rodada_id" value="{r['id']}"><label style="font-weight:700">Números sorteados nesta rodada</label><textarea name="numeros" rows="4" style="width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #cbd5e1;border-radius:10px" placeholder="Ex.: 03, 08, 12, 17, 21">{', '.join(f'{n:02d}' for n in nums)}</textarea><button style="margin-top:10px;padding:11px 16px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700">Salvar histórico desta rodada</button></form>{'<p style="color:#0f766e;font-weight:700;margin-bottom:0">✓ Histórico registrado</p>' if nums else '<p style="color:#b45309;margin-bottom:0">⚠ Histórico ainda não registrado</p>'}</section>''')\n        html=f'''<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pós-bingo</title></head><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f8fafc;margin:0;color:#0f172a"><main style="max-width:820px;margin:0 auto;padding:28px 18px"><div style="background:#0f172a;color:#fff;border-radius:18px;padding:22px"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75">Bingo Comunidade • Pós-bingo</div><h1 style="margin:8px 0">Histórico oficial — {evento['nome']}</h1><p style="margin:0;opacity:.85">Registre os números de cada rodada sem alterar cartelas, vendas ou resultados financeiros.</p></div>{''.join(linhas)}<p style="color:#64748b;font-size:13px">Os QR Codes já impressos continuam válidos. Depois de salvar, o comprador poderá consultar o histórico pelo QR da própria cartela.</p></main></body></html>'''
-        return html\n\n    try: bingo.PUBLIC_ENDPOINTS.add('pos_bingo_admin')\n    except Exception: pass\n\n    bingo.app._post_bingo_installed=True
+    # V2 pós-bingo: reconstrução manual segura para eventos já encerrados.
+    # Não altera cartelas, vendas, sorteios ou ganhadores; apenas registra o snapshot histórico.
+    def _normalizar_numeros_historico(raw):
+        vals=[]
+        for parte in str(raw or '').replace(';',',').replace('\
+',',').split(','):
+            parte=parte.strip()
+            if not parte: continue
+            try: n=int(parte)
+            except ValueError: continue
+            if 1 <= n <= 75 and n not in vals: vals.append(n)
+        return vals
+
+    @bingo.app.route('/pos-bingo', methods=['GET','POST'])
+    def pos_bingo_admin():
+        conn=bingo.get_db(); evento=bingo.evento_ativo(conn)
+        if not evento:
+            conn.close(); return 'Nenhum evento ativo.', 404
+        if request.method=='POST':
+            rodada_id=int(request.form.get('rodada_id') or 0)
+            rodada=conn.execute('SELECT * FROM rodadas WHERE id=? AND evento_id=?',(rodada_id,evento['id'])).fetchone()
+            if not rodada:
+                conn.close(); return 'Rodada não encontrada.',404
+            nums=_normalizar_numeros_historico(request.form.get('numeros',''))
+            if not nums:
+                conn.close(); return 'Informe pelo menos um número sorteado.',400
+            conn.execute('''INSERT INTO resultado_rodadas (evento_id,rodada_id,nome,padrao,premio,numeros_json,finalizada_em)
+                VALUES (?,?,?,?,?,?,?) ON CONFLICT(evento_id,rodada_id) DO UPDATE SET
+                nome=excluded.nome,padrao=excluded.padrao,premio=excluded.premio,
+                numeros_json=excluded.numeros_json,finalizada_em=excluded.finalizada_em''',
+                (evento['id'],rodada['id'],rodada['nome'],rodada['padrao'],float(rodada['premio'] or 0),json.dumps(nums),request.form.get('finalizada_em') or bingo.iso_brasilia()))
+            conn.commit()
+        rodadas=conn.execute('SELECT r.*,h.numeros_json,h.finalizada_em historico_em FROM rodadas r LEFT JOIN resultado_rodadas h ON h.rodada_id=r.id AND h.evento_id=r.evento_id WHERE r.evento_id=? ORDER BY r.ordem,r.id',(evento['id'],)).fetchall()
+        conn.close()
+        linhas=[]
+        for r in rodadas:
+            nums=json.loads(r['numeros_json'] or '[]') if r['numeros_json'] else []
+            linhas.append(f'''<section style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 4px 16px rgba(15,23,42,.06)"><h2 style="margin:0 0 6px">{r['ordem']}ª — {r['nome']}</h2><p style="margin:0 0 12px;color:#64748b">{bingo.padrao_label(r['padrao'])} • Prêmio: R$ {float(r['premio'] or 0):.2f}</p><form method="post"><input type="hidden" name="rodada_id" value="{r['id']}"><label style="font-weight:700">Números sorteados nesta rodada</label><textarea name="numeros" rows="4" style="width:100%;box-sizing:border-box;margin-top:8px;padding:12px;border:1px solid #cbd5e1;border-radius:10px" placeholder="Ex.: 03, 08, 12, 17, 21">{', '.join(f'{n:02d}' for n in nums)}</textarea><button style="margin-top:10px;padding:11px 16px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700">Salvar histórico desta rodada</button></form>{'<p style="color:#0f766e;font-weight:700;margin-bottom:0">✓ Histórico registrado</p>' if nums else '<p style="color:#b45309;margin-bottom:0">⚠ Histórico ainda não registrado</p>'}</section>''')
+        html=f'''<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pós-bingo</title></head><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f8fafc;margin:0;color:#0f172a"><main style="max-width:820px;margin:0 auto;padding:28px 18px"><div style="background:#0f172a;color:#fff;border-radius:18px;padding:22px"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75">Bingo Comunidade • Pós-bingo</div><h1 style="margin:8px 0">Histórico oficial — {evento['nome']}</h1><p style="margin:0;opacity:.85">Registre os números de cada rodada sem alterar cartelas, vendas ou resultados financeiros.</p></div>{''.join(linhas)}<p style="color:#64748b;font-size:13px">Os QR Codes já impressos continuam válidos. Depois de salvar, o comprador poderá consultar o histórico pelo QR da própria cartela.</p></main></body></html>'''
+        return html
+
+    try: bingo.PUBLIC_ENDPOINTS.add('pos_bingo_admin')
+    except Exception: pass
+
+    bingo.app._post_bingo_installed=True
