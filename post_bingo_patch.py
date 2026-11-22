@@ -214,7 +214,4 @@ def install(bingo):
         html=f'''<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pós-bingo</title></head><body style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f8fafc;margin:0;color:#0f172a"><main style="max-width:820px;margin:0 auto;padding:28px 18px"><div style="background:#0f172a;color:#fff;border-radius:18px;padding:22px"><div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.75">Bingo Comunidade • Pós-bingo</div><h1 style="margin:8px 0">Histórico oficial — {evento['nome']}</h1><p style="margin:0;opacity:.85">Registre os números de cada rodada sem alterar cartelas, vendas ou resultados financeiros.</p></div>{''.join(linhas)}<p style="color:#64748b;font-size:13px">Os QR Codes já impressos continuam válidos. Depois de salvar, o comprador poderá consultar o histórico pelo QR da própria cartela.</p></main></body></html>'''
         return html
 
-    try: bingo.PUBLIC_ENDPOINTS.add('pos_bingo_admin')
-    except Exception: pass
-
     bingo.app._post_bingo_installed=True
